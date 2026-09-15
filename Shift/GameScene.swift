@@ -6,13 +6,15 @@ class GameScene: SCNScene {
     var playerNode: SCNNode!
     
     // Les coordonnées X strictes de nos 4 bandes
-    let lanes: [Float] = [-1.5, -0.5, 0.5, 1.5]
+    let lanes: [Float] = [-0.9, -0.3, 0.3, 0.9]
     var currentLaneIndex = 1 // On commence sur la bande centrale gauche
     
     override init() {
         super.init()
         setupCamera()
         setupPlayer()
+        setupEnvironment()
+        spawnObstacle()
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -31,13 +33,13 @@ class GameScene: SCNScene {
     
     func setupPlayer() {
         // Un simple cube rouge pour commencer
-        let geometry = SCNBox(width: 0.8, height: 0.8, length: 1.5, chamferRadius: 0.1)
+        let geometry = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
         geometry.firstMaterial?.diffuse.contents = UIColor.systemRed
         
         playerNode = SCNNode(geometry: geometry)
         
         // On le place sur la bande de départ
-        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.4, z: 0)
+        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.2, z: 0)
         self.rootNode.addChildNode(playerNode)
     }
     
@@ -66,6 +68,45 @@ class GameScene: SCNScene {
             // On fait exécuter l'action à notre joueur
             playerNode.runAction(moveAction)
         }
+    }
+    
+    func setupEnvironment() {
+        // 1. Le ciel (fond de la scène)
+        self.background.contents = UIColor.systemTeal // Un bleu ciel clair
+        
+        // 2. La route (un sol infini)
+        let floorGeometry = SCNFloor()
+        floorGeometry.firstMaterial?.diffuse.contents = UIColor.darkGray
+        
+        let floorNode = SCNNode(geometry: floorGeometry)
+        // On le place à Y = 0 (sous le joueur)
+        floorNode.position = SCNVector3(x: 0, y: 0, z: 0)
+        self.rootNode.addChildNode(floorNode)
+    }
+    
+    func spawnObstacle() {
+        // On choisit une des 4 bandes au hasard
+        guard let randomLane = lanes.randomElement() else { return }
+        
+        // On crée l'ennemi (un cube gris clair)
+        let obstacleGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
+        obstacleGeo.firstMaterial?.diffuse.contents = UIColor.lightGray
+        let obstacleNode = SCNNode(geometry: obstacleGeo)
+        
+        // L'astuce : on le place très loin devant le joueur (Z = -50)
+        obstacleNode.position = SCNVector3(x: randomLane, y: 0.2, z: -50)
+        self.rootNode.addChildNode(obstacleNode)
+        
+        // On crée l'animation : avancer de 60 mètres vers nous (vers Z positif) en 2 secondes
+        let moveAction = SCNAction.moveBy(x: 0, y: 0, z: 60, duration: 2.0)
+        
+        // TRÈS IMPORTANT : On supprime le nœud une fois qu'il est passé derrière la caméra
+        // Sinon, la mémoire de l'iPhone va saturer après quelques minutes de jeu !
+        let removeAction = SCNAction.removeFromParentNode()
+        
+        // On exécute l'action d'avancer, puis celle de disparaître
+        let sequence = SCNAction.sequence([moveAction, removeAction])
+        obstacleNode.runAction(sequence)
     }
     
 }
