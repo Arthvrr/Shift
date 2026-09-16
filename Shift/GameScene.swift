@@ -52,7 +52,7 @@ class GameScene: SCNScene {
     var onDistanceUpdate: ((Float) -> Void)?
     var lastReportedDistance: Float = 0.0
 
-    var nextCoinDistance: Float = 500.0     // Kilométrage de la prochaine pièce
+    var nextCoinDistance: Float = 250.0     // Kilométrage de la prochaine pièce
     
     var onNearMiss: (() -> Void)?
     
@@ -115,31 +115,63 @@ class GameScene: SCNScene {
     
     func setBoost(active: Bool) {
         // On donne la vitesse cible : 60 en appuyant, retour à 30 en relâchant
-        targetSpeed = active ? 80.0 : 40.0
+        targetSpeed = active ? 60.0 : 40.0
     }
     
     func setupEnvironment() {
+        // 1. Le ciel (Tu peux changer la couleur selon l'ambiance que tu veux)
         self.background.contents = UIColor.systemTeal
-        let sunGeo = SCNSphere(radius: 5.0)
+        
+        // 2. Le soleil (On le recule à Z = -450 pour qu'il soit derrière la ville !)
+        let sunGeo = SCNSphere(radius: 15.0)
         sunGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
         sunGeo.firstMaterial?.emission.contents = UIColor.systemYellow
         let sunNode = SCNNode(geometry: sunGeo)
-        sunNode.position = SCNVector3(x: 10, y: 15, z: -80)
+        sunNode.position = SCNVector3(x: 30, y: 40, z: -450)
         self.rootNode.addChildNode(sunNode)
         
+        // --- 3. NOUVEAU : LE DÉCOR "HORIZON CHASE" ---
+        // On crée un écran géant de 400m de large sur 100m de haut
+        let horizonGeo = SCNPlane(width: 400.0, height: 100.0)
+        
+        // On lui applique ton image PNG
+        if let bgImage = UIImage(named: "horizon") {
+            horizonGeo.firstMaterial?.diffuse.contents = bgImage
+        } else {
+            // Si Xcode ne trouve pas l'image, il affichera un mur gris pour tester
+            horizonGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
+        }
+        
+        let horizonNode = SCNNode(geometry: horizonGeo)
+        
+        // On le place très loin (Z = -400) pour respecter la limite de vision de ta caméra (Z = 500)
+        // La valeur Y = 30 surélève la ville pour qu'elle se pose sur la ligne d'horizon
+        horizonNode.position = SCNVector3(x: 0, y: 30, z: -400)
+        
+        // Petite astuce : on l'incline très légèrement vers l'arrière pour qu'il soit
+        // bien perpendiculaire au regard de notre caméra qui penche vers le bas
+        horizonNode.eulerAngles = SCNVector3(x: -Float.pi / 16, y: 0, z: 0)
+        
+        self.rootNode.addChildNode(horizonNode)
+        // ---------------------------------------------
+        
+        // 4. Le sol infini
         let floorGeometry = SCNFloor()
+        // Tu peux changer la couleur ici si tu veux faire un désert ou de la neige !
         floorGeometry.firstMaterial?.diffuse.contents = UIColor.systemGreen
         floorGeometry.reflectivity = 0.0
         let floorNode = SCNNode(geometry: floorGeometry)
         floorNode.position = SCNVector3(x: 0, y: 0, z: 0)
         self.rootNode.addChildNode(floorNode)
         
+        // 5. La route en asphalte
         let roadGeo = SCNBox(width: 2.4, height: 0.005, length: 200.0, chamferRadius: 0)
         roadGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
         let roadNode = SCNNode(geometry: roadGeo)
         roadNode.position = SCNVector3(x: 0, y: 0.005, z: -45)
         self.rootNode.addChildNode(roadNode)
         
+        // 6. Les lignes blanches sur le bord de route
         let edgeXPositions: [Float] = [-1.2, 1.2]
         for x in edgeXPositions {
             let edgeLineGeo = SCNBox(width: 0.05, height: 0.01, length: 100.0, chamferRadius: 0)
@@ -433,7 +465,7 @@ class GameScene: SCNScene {
         // --- NOUVEAU : Apparition des pièces ---
         if distanceTraveled >= nextCoinDistance {
             spawnCoin()
-            nextCoinDistance += Float.random(in: 500.0...2000.0) // Une pièce tous les 20 à 50m
+            nextCoinDistance += Float.random(in: 250.0...1000.0)
         }
         
         // --- LE "FAUX" CALCUL DE LA VITESSE (L'illusion d'arcade) ---
