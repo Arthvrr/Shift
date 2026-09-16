@@ -28,6 +28,7 @@ class GameScene: SCNScene {
         
         startSpawning()
         startScoring()
+        startSpawningLines()
         
         self.physicsWorld.contactDelegate = self
     }
@@ -107,6 +108,19 @@ class GameScene: SCNScene {
         // On le place à Y = 0 (sous le joueur)
         floorNode.position = SCNVector3(x: 0, y: 0, z: 0)
         self.rootNode.addChildNode(floorNode)
+        
+        let edgeXPositions: [Float] = [-1.2, 1.2]
+        
+        for x in edgeXPositions {
+            // Une boîte très longue (length: 100) pour faire une ligne continue "infinie"
+            let edgeLineGeo = SCNBox(width: 0.05, height: 0.01, length: 100.0, chamferRadius: 0)
+            edgeLineGeo.firstMaterial?.diffuse.contents = UIColor.white
+            
+            let edgeLineNode = SCNNode(geometry: edgeLineGeo)
+            // On la place à Z = -45 pour qu'elle couvre toute la vue de la caméra (qui est à Z = 5) jusqu'à l'horizon
+            edgeLineNode.position = SCNVector3(x: x, y: 0.01, z: -45)
+            self.rootNode.addChildNode(edgeLineNode)
+        }
     }
     
     func spawnObstacle() {
@@ -141,6 +155,31 @@ class GameScene: SCNScene {
         obstacleNode.runAction(sequence)
     }
     
+    func spawnLineDashes() {
+        // Les 3 positions exactes entre tes 4 bandes
+        let lineXPositions: [Float] = [-0.6, 0.0, 0.6]
+        
+        for x in lineXPositions {
+            // Un rectangle très fin et plat (width: 0.05, height: tout petit)
+            let lineGeo = SCNBox(width: 0.05, height: 0.01, length: 1.0, chamferRadius: 0)
+            lineGeo.firstMaterial?.diffuse.contents = UIColor.white
+            
+            let lineNode = SCNNode(geometry: lineGeo)
+            // L'astuce Y = 0.01 : on le place juste un poil au-dessus du sol gris (0.0) pour qu'il soit visible
+            lineNode.position = SCNVector3(x: x, y: 0.01, z: -50)
+            self.rootNode.addChildNode(lineNode)
+            
+            // EXACTEMENT la même vitesse que les obstacles (60m en 2 secondes)
+            let moveAction = SCNAction.moveBy(x: 0, y: 0, z: 60, duration: 2.0)
+            let removeAction = SCNAction.removeFromParentNode()
+            let sequence = SCNAction.sequence([moveAction, removeAction])
+            
+            lineNode.runAction(sequence)
+        }
+    }
+    
+    
+    
     func startSpawning() {
         // 1. Action d'attente (1 seconde entre chaque voiture)
         let wait = SCNAction.wait(duration: 1.0)
@@ -158,6 +197,18 @@ class GameScene: SCNScene {
         
         // 5. On lance la boucle (on lui donne un nom "spawningLoop" pour pouvoir l'arrêter lors d'un Game Over)
         self.rootNode.runAction(repeatForever, forKey: "spawningLoop")
+    }
+    
+    func startSpawningLines() {
+        // 0.2 seconde crée un bon espace (vide) entre chaque trait blanc
+        let wait = SCNAction.wait(duration: 0.2)
+        let spawn = SCNAction.run { _ in
+            self.spawnLineDashes()
+        }
+        let sequence = SCNAction.sequence([wait, spawn])
+        
+        // On nomme cette boucle "linesLoop"
+        self.rootNode.runAction(SCNAction.repeatForever(sequence), forKey: "linesLoop")
     }
     
     
@@ -180,6 +231,8 @@ class GameScene: SCNScene {
         self.rootNode.runAction(SCNAction.repeatForever(sequence), forKey: "scoringLoop")
     }
     
+    
+    
 }
 
 extension GameScene: SCNPhysicsContactDelegate {
@@ -187,6 +240,8 @@ extension GameScene: SCNPhysicsContactDelegate {
         //print("💥 BOOM ! Collision détectée !")
         self.rootNode.removeAction(forKey: "spawningLoop")
         self.rootNode.removeAction(forKey: "scoringLoop")
+        self.rootNode.removeAction(forKey: "linesLoop")
+        
         self.isPaused = true
         
         // On envoie le signal à SwiftUI sur le fil principal
