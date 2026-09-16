@@ -19,6 +19,8 @@ struct ContentView: View {
     
     @State private var distance: Float = 0.0
     
+    @State private var nearMissOpacity: Double = 0.0
+    
     var body: some View {
         ZStack {
             SceneView(
@@ -35,10 +37,10 @@ struct ContentView: View {
                             
                             // 2. On swipe si le joueur fait un mouvement fort
                             if !hasSwiped {
-                                if value.translation.width < -10 {
+                                if value.translation.width < -5 {
                                     scene.movePlayer(direction: -1)
                                     hasSwiped = true
-                                } else if value.translation.width > 10 {
+                                } else if value.translation.width > 5 {
                                     scene.movePlayer(direction: 1)
                                     hasSwiped = true
                                 }
@@ -66,6 +68,19 @@ struct ContentView: View {
                 scene.onCoinCollected = { totalCoins += 1 }
                 scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
                 scene.onDistanceUpdate = { newDist in distance = newDist } // Connexion !
+                
+                scene.onNearMiss = {
+                    // 1. On fait apparaître le texte instantanément
+                    withAnimation(.easeOut(duration: 0.1)) {
+                        nearMissOpacity = 1.0
+                    }
+                    // 2. On le fait disparaître en fondu après 0.8 seconde
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        withAnimation(.easeIn(duration: 0.5)) {
+                            nearMissOpacity = 0.0
+                        }
+                    }
+                }
             }
             
             // --- HUD (L'affichage au dessus du jeu) ---
@@ -135,6 +150,15 @@ struct ContentView: View {
                 Spacer() // Pousse le bloc de HUD vers le haut
             }
             
+            // --- ANIMATION NEAR MISS ---
+            Text("🔥 NEAR MISS ! 🔥\n+10")
+                .font(.system(size: 30, weight: .black, design: .rounded))
+                .foregroundColor(.orange)
+                .multilineTextAlignment(.center)
+                .shadow(color: .red, radius: 5, x: 0, y: 0)
+                .opacity(nearMissOpacity)
+                .offset(y: -50) // Le remonte un peu au-dessus du joueur
+            
             // --- MENU GAME OVER ---
             if isGameOver {
                 Color.black.opacity(0.8).ignoresSafeArea() // Un peu plus sombre pour faire ressortir les couleurs
@@ -188,12 +212,33 @@ struct ContentView: View {
                         scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
                         scene.onDistanceUpdate = { newDist in distance = newDist }
                         
+                        scene.onNearMiss = {
+                            // 1. Coupe instantanément l'ancienne animation si on enchaîne deux esquives
+                            nearMissOpacity = 0.0
+                            
+                            // 2. Un micro-délai pour que l'interface ait le temps de clignoter
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                // Apparition fulgurante (0.05 seconde)
+                                withAnimation(.easeOut(duration: 0.05)) {
+                                    nearMissOpacity = 1.0
+                                }
+                                
+                                // Disparition très rapide juste après (0.2 seconde plus tard)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    withAnimation(.easeIn(duration: 0.15)) {
+                                        nearMissOpacity = 0.0
+                                    }
+                                }
+                            }
+                        }
+                        
                         // On remet l'interface à zéro pour la nouvelle partie
                         score = 0
                         distance = 0.0
                         speedKmH = 90
                         isNewRecord = false
                         recordScale = 1.0
+                        nearMissOpacity = 0.0
                         isGameOver = false
                     }) {
                         Text("REPLAY")

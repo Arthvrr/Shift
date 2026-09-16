@@ -17,6 +17,7 @@ class ObstacleNode: SCNNode {
     var currentLaneIndex: Int = 0        // Sur quelle bande je suis
     var hasDecidedToTurn: Bool = false   // Est-ce que j'ai déjà checké pour tourner ?
     var targetX: Float? = nil            // L'objectif X si je tourne
+    var hasScoredNearMiss: Bool = false
 }
 
 class GameScene: SCNScene {
@@ -51,7 +52,11 @@ class GameScene: SCNScene {
     var onDistanceUpdate: ((Float) -> Void)?
     var lastReportedDistance: Float = 0.0
 
-    var nextCoinDistance: Float = 1000.0     // Kilométrage de la prochaine pièce
+    var nextCoinDistance: Float = 500.0     // Kilométrage de la prochaine pièce
+    
+    var onNearMiss: (() -> Void)?
+    
+    var lastLaneChangeTime: TimeInterval = 0.0
     
     override init() {
         super.init()
@@ -97,6 +102,10 @@ class GameScene: SCNScene {
         let newIndex = currentLaneIndex + direction
         if newIndex >= 0 && newIndex < lanes.count {
             currentLaneIndex = newIndex
+            
+            // --- NOUVEAU : On enregistre le moment exact du coup de volant ---
+            lastLaneChangeTime = CACurrentMediaTime()
+            
             let targetPosition = SCNVector3(x: lanes[currentLaneIndex], y: playerNode.position.y, z: playerNode.position.z)
             let moveAction = SCNAction.move(to: targetPosition, duration: 0.15)
             moveAction.timingMode = .easeOut
@@ -336,6 +345,28 @@ class GameScene: SCNScene {
                     } else if obstacle.position.x > targetX {
                         obstacle.position.x -= slideSpeed
                         if obstacle.position.x <= targetX { obstacle.position.x = targetX; obstacle.targetX = nil }
+                    }
+                }
+                
+                // --- 4. DÉTECTION DU NEAR MISS ---
+                let dz = abs(obstacle.position.z - playerNode.position.z)
+                let dx = abs(obstacle.position.x - playerNode.position.x)
+                
+                // NOUVEAU : Est-ce qu'on vient de donner un coup de volant ?
+                // Le mouvement dure 0.15s, on laisse 0.4s de fenêtre pour être généreux
+                let currentTime = CACurrentMediaTime()
+                let isDodging = (currentTime - lastLaneChangeTime) < 0.15
+                
+                // On ajoute "isDodging" à la validation !
+                if dz < 0.7 && dx > 0.45 && dx < 0.75 && !obstacle.hasScoredNearMiss && isDodging {
+                    obstacle.hasScoredNearMiss = true
+                    
+                    let bonus = (targetSpeed > 40.0) ? 20 : 10
+                    score += bonus
+                    
+                    DispatchQueue.main.async {
+                        self.onScoreUpdate?(self.score)
+                        self.onNearMiss?()
                     }
                 }
                 
