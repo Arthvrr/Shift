@@ -6,6 +6,8 @@ struct ContentView: View {
     @State private var isGameOver = false
     @State private var isGamePaused = false
     
+    @State private var hasSwiped = false
+    
     // 1. On ajoute une variable d'état pour le score
     @State private var score = 0
     
@@ -17,14 +19,29 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
             .gesture(
-                DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                    .onEnded { value in
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
                         if !isGameOver && !isGamePaused {
-                            if value.translation.width < 0 {
-                                scene.movePlayer(direction: -1)
-                            } else if value.translation.width > 0 {
-                                scene.movePlayer(direction: 1)
+                            // 1. BOOM ! On active le Boost dès que le doigt est là
+                            scene.setBoost(active: true)
+                            
+                            // 2. On swipe si le joueur fait un mouvement fort
+                            if !hasSwiped {
+                                if value.translation.width < -30 {
+                                    scene.movePlayer(direction: -1)
+                                    hasSwiped = true
+                                } else if value.translation.width > 30 {
+                                    scene.movePlayer(direction: 1)
+                                    hasSwiped = true
+                                }
                             }
+                        }
+                    }
+                    .onEnded { _ in
+                        if !isGameOver && !isGamePaused {
+                            // 3. On relâche, vitesse normale et on réarme le swipe
+                            scene.setBoost(active: false)
+                            hasSwiped = false
                         }
                     }
             )
@@ -104,7 +121,7 @@ struct ContentView: View {
                             .cornerRadius(15)
                     }
                 }
-            }go
+            }
             // --- MENU PAUSE ---
             if isGamePaused && !isGameOver {
                 Color.black.opacity(0.7).ignoresSafeArea()
