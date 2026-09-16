@@ -14,6 +14,11 @@ struct ContentView: View {
     @State private var isNewRecord = false
     @State private var recordScale: CGFloat = 1.0
     
+    @AppStorage("totalCoins") private var totalCoins = 0 // Sauvegarde magique sur l'iPhone !
+    @State private var speedKmH = 90 // Vitesse de base affichée
+    
+    @State private var distance: Float = 0.0
+    
     var body: some View {
         ZStack {
             SceneView(
@@ -50,7 +55,6 @@ struct ContentView: View {
             )
             .onAppear {
                 scene.onGameOver = {
-                    // Vérification du High Score AVANT d'afficher l'écran de fin
                     if score > highScore {
                         highScore = score
                         isNewRecord = true
@@ -58,20 +62,20 @@ struct ContentView: View {
                     isGameOver = true
                 }
                 
-                // On écoute les mises à jour du score envoyées par la 3D
-                scene.onScoreUpdate = { newScore in
-                    score = newScore
-                }
+                scene.onScoreUpdate = { newScore in score = newScore }
+                scene.onCoinCollected = { totalCoins += 1 }
+                scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
+                scene.onDistanceUpdate = { newDist in distance = newDist } // Connexion !
             }
             
             // --- HUD (L'affichage au dessus du jeu) ---
             VStack {
-                ZStack {
-                    // Bouton Pause aligné à gauche
+                ZStack(alignment: .top) {
+                    // Bouton Pause à gauche
                     HStack {
                         Button(action: {
                             isGamePaused = true
-                            scene.isPaused = true // Magie SceneKit : fige tout l'univers 3D !
+                            scene.isPaused = true
                         }) {
                             Image(systemName: "pause.fill")
                                 .font(.title2)
@@ -79,16 +83,51 @@ struct ContentView: View {
                                 .frame(width: 50, height: 50)
                                 .background(Color.blue)
                                 .cornerRadius(10)
-                                .shadow(radius: 3)
                         }
                         Spacer()
                     }
                     
-                    // Score parfaitement centré
+                    // Score au centre
                     Text("\(score)")
                         .font(.system(size: 45, weight: .heavy, design: .rounded))
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 2)
+                    
+                    // --- Vitesse, Distance et Pièces à droite ---
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 5) {
+                            Text("\(speedKmH) km/h")
+                                .font(.system(size: 18, weight: .black, design: .rounded))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(8)
+                            
+                            // NOUVEAU : Affichage de la distance en km (ex: "1.24 km")
+                            Text(String(format: "%.2f km", distance / 1000.0))
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(8)
+                            
+                            HStack(spacing: 5) {
+                                Text("\(totalCoins)")
+                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                Image(systemName: "c.circle.fill")
+                                    .foregroundColor(.yellow)
+                                    .font(.title3)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.5))
+                            .cornerRadius(8)
+                        }
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 60)
@@ -142,14 +181,19 @@ struct ContentView: View {
                             isGameOver = true
                         }
                         
-                        scene.onScoreUpdate = { newScore in
-                            score = newScore
-                        }
+                        scene.onScoreUpdate = { newScore in score = newScore }
                         
-                        // On remet tout à zéro pour la nouvelle partie
+                        // LES VOICI ! On reconnecte tout à la nouvelle scène
+                        scene.onCoinCollected = { totalCoins += 1 }
+                        scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
+                        scene.onDistanceUpdate = { newDist in distance = newDist }
+                        
+                        // On remet l'interface à zéro pour la nouvelle partie
                         score = 0
-                        isNewRecord = false // On éteint le drapeau du record
-                        recordScale = 1.0   // On réinitialise l'animation
+                        distance = 0.0
+                        speedKmH = 90
+                        isNewRecord = false
+                        recordScale = 1.0
                         isGameOver = false
                     }) {
                         Text("REPLAY")

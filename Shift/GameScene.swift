@@ -9,6 +9,7 @@ enum TrafficCondition {
 struct CollisionCategory {
     static let player = 1 << 0
     static let obstacle = 1 << 1
+    static let coin = 1 << 2
 }
 
 class ObstacleNode: SCNNode {
@@ -42,6 +43,15 @@ class GameScene: SCNScene {
     
     var currentTraffic: TrafficCondition = .normal
     var carsLeftInWave: Int = 10
+    
+    var onCoinCollected: (() -> Void)?     // Signal envoyé quand on ramasse une pièce
+    var onSpeedUpdate: ((Int) -> Void)?    // Signal envoyé pour afficher les km/h
+    var lastReportedSpeed: Int = 0
+    
+    var onDistanceUpdate: ((Float) -> Void)?
+    var lastReportedDistance: Float = 0.0
+
+    var nextCoinDistance: Float = 1000.0     // Kilométrage de la prochaine pièce
     
     override init() {
         super.init()
@@ -79,7 +89,7 @@ class GameScene: SCNScene {
         playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.2, z: 2)
         playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
         playerNode.physicsBody?.categoryBitMask = CollisionCategory.player
-        playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle
+        playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle | CollisionCategory.coin
         self.rootNode.addChildNode(playerNode)
     }
     
@@ -150,7 +160,7 @@ class GameScene: SCNScene {
             }
         }
         
-        var newSpeed = Float.random(in: 5.0...25.0)
+        var newSpeed = Float.random(in: 5.0...30.0)
         if let carAhead = lastCarInLane {
             if newSpeed < carAhead.drivingSpeed {
                 newSpeed = carAhead.drivingSpeed
@@ -215,6 +225,30 @@ class GameScene: SCNScene {
         
         cloudNode.name = "cloud"
         self.rootNode.addChildNode(cloudNode)
+    }
+    
+    
+    func spawnCoin() {
+        guard let randomLane = lanes.randomElement() else { return }
+        
+        // On crée un cylindre fin (une pièce)
+        let coinGeo = SCNCylinder(radius: 0.2, height: 0.05)
+        coinGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
+        coinGeo.firstMaterial?.emission.contents = UIColor.systemYellow // Pour qu'elle brille
+        
+        let coinNode = SCNNode(geometry: coinGeo)
+        // On la couche sur la route et on la surélève un peu
+        coinNode.position = SCNVector3(x: randomLane, y: 0.3, z: -50)
+        
+        coinNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
+        coinNode.physicsBody?.categoryBitMask = CollisionCategory.coin
+        coinNode.name = "coin" // Très important pour la reconnaître !
+        
+        // On la fait tourner indéfiniment sur elle-même pour attirer l'œil
+        let spin = SCNAction.rotateBy(x: 0, y: CGFloat.pi * 2, z: 0, duration: 1.0)
+        coinNode.runAction(SCNAction.repeatForever(spin))
+        
+        self.rootNode.addChildNode(coinNode)
     }
     
     // ==========================================
@@ -307,6 +341,12 @@ class GameScene: SCNScene {
                 
                 if obstacle.position.z > 10 { obstacle.removeFromParentNode() }
                 
+            
+            } else if node.name == "coin" {
+                // Les pièces sont posées sur la route, elles se rapprochent à la vitesse du jeu
+                node.position.z += distance
+                if node.position.z > 10 { node.removeFromParentNode() }
+                
             } else if node.name == "line" {
                 // La route, elle, défile toujours à la vitesse max (gameSpeed)
                 node.position.z += distance
@@ -359,6 +399,33 @@ class GameScene: SCNScene {
             }
         }
         
+        // --- NOUVEAU : Apparition des pièces ---
+        if distanceTraveled >= nextCoinDistance {
+            spawnCoin()
+            nextCoinDistance += Float.random(in: 500.0...2000.0) // Une pièce tous les 20 à 50m
+        }
+        
+        // --- LE "FAUX" CALCUL DE LA VITESSE (L'illusion d'arcade) ---
+        // Le ratio magique de 2.25 permet d'afficher 90km/h quand le jeu tourne à 40m/s
+        let magicMultiplier: Float = 2.25
+        let currentKmH = Int(gameSpeed * magicMultiplier)
+        
+        if currentKmH != lastReportedSpeed {
+            lastReportedSpeed = currentKmH
+            DispatchQueue.main.async { self.onSpeedUpdate?(currentKmH) }
+        }
+        
+        // --- LE "FAUX" CALCUL DE LA DISTANCE ---
+        // Pour que les kilomètres parcourus soient mathématiquement logiques avec
+        // ce faux compteur de vitesse, on applique un ratio inverse à la distance.
+        // Ratio de 0.625 (soit 90/144)
+        let virtualDistance = distanceTraveled * 0.625
+        
+        if virtualDistance - lastReportedDistance >= 10.0 {
+            lastReportedDistance = virtualDistance
+            DispatchQueue.main.async { self.onDistanceUpdate?(virtualDistance) }
+        }
+        
         if distanceTraveled >= nextCloudDistance {
             spawnCloud()
             // Un nuage apparaît tous les 80 à 150 mètres
@@ -376,11 +443,22 @@ class GameScene: SCNScene {
 
 extension GameScene: SCNPhysicsContactDelegate {
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+        let nodeA = contact.nodeA
+        let nodeB = contact.nodeB
+        
+        // 1. Est-ce qu'on a touché une pièce ?
+        if nodeA.name == "coin" || nodeB.name == "coin" {
+            let coinNode = nodeA.name == "coin" ? nodeA : nodeB
+            coinNode.removeFromParentNode() // La pièce disparaît !
+            
+            // On prévient l'interface de rajouter 1 coin
+            DispatchQueue.main.async { self.onCoinCollected?() }
+            return // On s'arrête là, pas de Game Over !
+        }
+        
+        // 2. Sinon, c'est un obstacle ! GAME OVER.
         self.isPaused = true
-        
-        // On désactive le métronome pour couper le jeu net
         self.displayLink?.invalidate()
-        
         DispatchQueue.main.async {
             self.onGameOver?()
         }
