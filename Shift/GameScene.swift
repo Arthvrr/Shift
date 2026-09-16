@@ -64,6 +64,9 @@ class GameScene: SCNScene {
     func setupCamera() {
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
+        
+        cameraNode.camera?.zFar = 500.0
+        
         cameraNode.position = SCNVector3(x: 0, y: 3, z: 5)
         cameraNode.eulerAngles = SCNVector3(x: -Float.pi / 8, y: 0, z: 0)
         self.rootNode.addChildNode(cameraNode)
@@ -73,7 +76,7 @@ class GameScene: SCNScene {
         let geometry = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
         geometry.firstMaterial?.diffuse.contents = UIColor.systemRed
         playerNode = SCNNode(geometry: geometry)
-        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.2, z: 0)
+        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.2, z: 2)
         playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
         playerNode.physicsBody?.categoryBitMask = CollisionCategory.player
         playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle
@@ -207,7 +210,7 @@ class GameScene: SCNScene {
         let cloudNode = SCNNode(geometry: cloudGeo)
         cloudNode.eulerAngles = SCNVector3(x: 0, y: 0, z: Float.pi / 2)
         let randomX = Float.random(in: -20...20)
-        let randomY = Float.random(in: 10...20)
+        let randomY = Float.random(in: 5...12)
         cloudNode.position = SCNVector3(x: randomX, y: randomY, z: -100)
         
         cloudNode.name = "cloud"
@@ -292,7 +295,7 @@ class GameScene: SCNScene {
                 
                 // 3. Déportement latéral fluide (si un changement de bande est en cours)
                 if let targetX = obstacle.targetX {
-                    let slideSpeed: Float = 1.0 * deltaTime // Vitesse du coup de volant
+                    let slideSpeed: Float = 1.5 * deltaTime // Vitesse du coup de volant
                     if obstacle.position.x < targetX {
                         obstacle.position.x += slideSpeed
                         if obstacle.position.x >= targetX { obstacle.position.x = targetX; obstacle.targetX = nil }
@@ -354,6 +357,12 @@ class GameScene: SCNScene {
                 // Embouteillage : Les voitures s'enchaînent tous les 6 à 12 mètres !
                 nextObstacleDistance += Float.random(in: 6.0...12.0)
             }
+        }
+        
+        if distanceTraveled >= nextCloudDistance {
+            spawnCloud()
+            // Un nuage apparaît tous les 80 à 150 mètres
+            nextCloudDistance += Float.random(in: 80.0...150.0)
         }
         
         // 4. Score lié à la distance (Le boost le fait grimper 2x plus vite !)

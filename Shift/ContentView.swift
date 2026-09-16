@@ -27,10 +27,10 @@ struct ContentView: View {
                             
                             // 2. On swipe si le joueur fait un mouvement fort
                             if !hasSwiped {
-                                if value.translation.width < -30 {
+                                if value.translation.width < -10 {
                                     scene.movePlayer(direction: -1)
                                     hasSwiped = true
-                                } else if value.translation.width > 30 {
+                                } else if value.translation.width > 10 {
                                     scene.movePlayer(direction: 1)
                                     hasSwiped = true
                                 }
