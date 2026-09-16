@@ -16,6 +16,9 @@ class GameScene: SCNScene {
     let lanes: [Float] = [-0.9, -0.3, 0.3, 0.9]
     var currentLaneIndex = 1 // On commence sur la bande centrale gauche
     
+    var score: Int = 0
+    var onScoreUpdate: ((Int) -> Void)?
+    
     override init() {
         super.init()
         setupCamera()
@@ -24,6 +27,7 @@ class GameScene: SCNScene {
         //spawnObstacle()
         
         startSpawning()
+        startScoring()
         
         self.physicsWorld.contactDelegate = self
     }
@@ -156,12 +160,33 @@ class GameScene: SCNScene {
         self.rootNode.runAction(repeatForever, forKey: "spawningLoop")
     }
     
+    
+    // 2. Créer la fonction qui lance le chronomètre (à mettre avec tes autres fonctions)
+    func startScoring() {
+        // On attend 0.1 seconde
+        let wait = SCNAction.wait(duration: 0.1)
+        
+        // On augmente le score et on prévient SwiftUI
+        let increment = SCNAction.run { _ in
+            self.score += 1
+            // DispatchQueue assure que l'UI se met à jour sur le bon "fil" de traitement
+            DispatchQueue.main.async {
+                self.onScoreUpdate?(self.score)
+            }
+        }
+        
+        // On boucle à l'infini
+        let sequence = SCNAction.sequence([wait, increment])
+        self.rootNode.runAction(SCNAction.repeatForever(sequence), forKey: "scoringLoop")
+    }
+    
 }
 
 extension GameScene: SCNPhysicsContactDelegate {
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
         //print("💥 BOOM ! Collision détectée !")
         self.rootNode.removeAction(forKey: "spawningLoop")
+        self.rootNode.removeAction(forKey: "scoringLoop")
         self.isPaused = true
         
         // On envoie le signal à SwiftUI sur le fil principal
