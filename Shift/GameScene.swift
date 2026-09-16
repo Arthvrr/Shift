@@ -13,6 +13,9 @@ struct CollisionCategory {
 
 class ObstacleNode: SCNNode {
     var drivingSpeed: Float = 0.0
+    var currentLaneIndex: Int = 0        // Sur quelle bande je suis
+    var hasDecidedToTurn: Bool = false   // Est-ce que j'ai déjà checké pour tourner ?
+    var targetX: Float? = nil            // L'objectif X si je tourne
 }
 
 class GameScene: SCNScene {
@@ -126,16 +129,17 @@ class GameScene: SCNScene {
     }
     
     func spawnObstacle() {
-        guard let randomLane = lanes.randomElement() else { return }
+        // --- 1. CHOIX DE LA BANDE ---
+        let randomLaneIndex = Int.random(in: 0..<lanes.count)
+        let randomLaneX = lanes[randomLaneIndex]
         
-        // --- 1. SÉCURITÉ ANTI-COLLISION (Régulateur de vitesse) ---
+        // --- 2. SÉCURITÉ ANTI-COLLISION AU DÉPART ---
         var lastCarInLane: ObstacleNode? = nil
-        var minZ: Float = 100.0 // On cherche la voiture la plus proche du point de départ (Z = -50)
+        var minZ: Float = 100.0
         
-        // On scanne tous les objets actuellement sur la route
         for node in self.rootNode.childNodes {
-            if let obstacle = node as? ObstacleNode, obstacle.position.x == randomLane {
-                // Si la voiture est sur la même bande, on regarde si c'est la dernière générée
+            // On vérifie avec l'index de bande pour détecter même les voitures en train de tourner !
+            if let obstacle = node as? ObstacleNode, obstacle.currentLaneIndex == randomLaneIndex {
                 if obstacle.position.z < minZ {
                     minZ = obstacle.position.z
                     lastCarInLane = obstacle
@@ -143,29 +147,25 @@ class GameScene: SCNScene {
             }
         }
         
-        // On génère la vitesse aléatoire de base
         var newSpeed = Float.random(in: 5.0...25.0)
-        
         if let carAhead = lastCarInLane {
-            // Si la nouvelle voiture "drivingSpeed" est plus petite (donc se rapproche de nous plus vite)
-            // que la voiture de devant, il y aura collision. On la bride donc à la même vitesse !
             if newSpeed < carAhead.drivingSpeed {
                 newSpeed = carAhead.drivingSpeed
             }
         }
         
-        // --- 2. CRÉATION DE L'OBSTACLE ---
+        // --- 3. CRÉATION DE L'OBSTACLE ---
         let obstacleGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
         let obstacleNode = ObstacleNode()
         obstacleNode.geometry = obstacleGeo
         
-        // On applique la vitesse (bridée ou non)
         obstacleNode.drivingSpeed = newSpeed
+        obstacleNode.currentLaneIndex = randomLaneIndex // NOUVEAU : On mémorise la bande
         
         let colorIntensity = CGFloat(obstacleNode.drivingSpeed / 30.0)
         obstacleGeo.firstMaterial?.diffuse.contents = UIColor(white: colorIntensity + 0.3, alpha: 1.0)
         
-        obstacleNode.position = SCNVector3(x: randomLane, y: 0.2, z: -50)
+        obstacleNode.position = SCNVector3(x: randomLaneX, y: 0.2, z: -50)
         obstacleNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
         obstacleNode.physicsBody?.categoryBitMask = CollisionCategory.obstacle
         obstacleNode.name = "obstacle"
@@ -249,9 +249,58 @@ class GameScene: SCNScene {
             
             // --- NOUVEAU : Si le nœud est une voiture ennemie ---
             if let obstacle = node as? ObstacleNode {
-                // Vitesse relative : (Vitesse globale du jeu) - (Vitesse de la voiture)
+                // 1. Déplacement vers l'avant (Vitesse relative)
                 let relativeSpeed = gameSpeed - obstacle.drivingSpeed
                 obstacle.position.z += relativeSpeed * deltaTime
+                
+                // 2. IA DE CHANGEMENT DE VOIE
+                // On déclenche la décision quand la voiture arrive à 35 mètres de nous
+                if obstacle.position.z > -35.0 && !obstacle.hasDecidedToTurn {
+                    obstacle.hasDecidedToTurn = true // Décision prise une seule fois
+                    
+                    // 30% de chance d'essayer de changer de bande
+                    if Int.random(in: 1...100) <= 30 {
+                        var possibleDirections: [Int] = []
+                        if obstacle.currentLaneIndex > 0 { possibleDirections.append(-1) } // Peut aller à gauche
+                        if obstacle.currentLaneIndex < lanes.count - 1 { possibleDirections.append(1) } // Peut aller à droite
+                        
+                        if let dir = possibleDirections.randomElement() {
+                            let targetIndex = obstacle.currentLaneIndex + dir
+                            
+                            // SÉCURITÉ : Vérifier si la bande cible est libre
+                            var isSafe = true
+                            for otherNode in self.rootNode.childNodes {
+                                if let otherCar = otherNode as? ObstacleNode, otherCar != obstacle {
+                                    if otherCar.currentLaneIndex == targetIndex {
+                                        // Si une autre voiture est à moins de 15m (devant ou derrière), on annule !
+                                        if abs(otherCar.position.z - obstacle.position.z) < 15.0 {
+                                            isSafe = false
+                                            break
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if isSafe {
+                                // On valide le changement ! On "réserve" la bande tout de suite.
+                                obstacle.currentLaneIndex = targetIndex
+                                obstacle.targetX = lanes[targetIndex]
+                            }
+                        }
+                    }
+                }
+                
+                // 3. Déportement latéral fluide (si un changement de bande est en cours)
+                if let targetX = obstacle.targetX {
+                    let slideSpeed: Float = 1.0 * deltaTime // Vitesse du coup de volant
+                    if obstacle.position.x < targetX {
+                        obstacle.position.x += slideSpeed
+                        if obstacle.position.x >= targetX { obstacle.position.x = targetX; obstacle.targetX = nil }
+                    } else if obstacle.position.x > targetX {
+                        obstacle.position.x -= slideSpeed
+                        if obstacle.position.x <= targetX { obstacle.position.x = targetX; obstacle.targetX = nil }
+                    }
+                }
                 
                 if obstacle.position.z > 10 { obstacle.removeFromParentNode() }
                 
