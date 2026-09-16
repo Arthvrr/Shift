@@ -1,8 +1,18 @@
 import SceneKit
 
+enum TrafficCondition {
+    case clear       // Autoroute dégagée
+    case normal      // Trafic habituel
+    case heavy       // Embouteillage (très dense !)
+}
+
 struct CollisionCategory {
     static let player = 1 << 0
     static let obstacle = 1 << 1
+}
+
+class ObstacleNode: SCNNode {
+    var drivingSpeed: Float = 0.0
 }
 
 class GameScene: SCNScene {
@@ -17,8 +27,8 @@ class GameScene: SCNScene {
     
     // --- LE NOUVEAU MOTEUR DU JEU ---
     var displayLink: CADisplayLink?
-    var gameSpeed: Float = 30.0    // Vitesse actuelle (en temps réel)
-    var targetSpeed: Float = 30.0  // Vitesse que l'on cherche à atteindre (30 ou 60)
+    var gameSpeed: Float = 40.0    // Vitesse actuelle (en temps réel)
+    var targetSpeed: Float = 40.0  // Vitesse que l'on cherche à atteindre (30 ou 60)
     var distanceTraveled: Float = 0
     
     // Les compteurs kilométriques pour faire apparaître de nouveaux objets
@@ -26,6 +36,9 @@ class GameScene: SCNScene {
     var nextObstacleDistance: Float = 30.0
     var nextCloudDistance: Float = 0.0
     var nextScoreDistance: Float = 3.0 // +1 point tous les 3 mètres
+    
+    var currentTraffic: TrafficCondition = .normal
+    var carsLeftInWave: Int = 10
     
     override init() {
         super.init()
@@ -77,7 +90,7 @@ class GameScene: SCNScene {
     
     func setBoost(active: Bool) {
         // On donne la vitesse cible : 60 en appuyant, retour à 30 en relâchant
-        targetSpeed = active ? 60.0 : 30.0
+        targetSpeed = active ? 80.0 : 40.0
     }
     
     func setupEnvironment() {
@@ -114,15 +127,49 @@ class GameScene: SCNScene {
     
     func spawnObstacle() {
         guard let randomLane = lanes.randomElement() else { return }
+        
+        // --- 1. SÉCURITÉ ANTI-COLLISION (Régulateur de vitesse) ---
+        var lastCarInLane: ObstacleNode? = nil
+        var minZ: Float = 100.0 // On cherche la voiture la plus proche du point de départ (Z = -50)
+        
+        // On scanne tous les objets actuellement sur la route
+        for node in self.rootNode.childNodes {
+            if let obstacle = node as? ObstacleNode, obstacle.position.x == randomLane {
+                // Si la voiture est sur la même bande, on regarde si c'est la dernière générée
+                if obstacle.position.z < minZ {
+                    minZ = obstacle.position.z
+                    lastCarInLane = obstacle
+                }
+            }
+        }
+        
+        // On génère la vitesse aléatoire de base
+        var newSpeed = Float.random(in: 5.0...25.0)
+        
+        if let carAhead = lastCarInLane {
+            // Si la nouvelle voiture "drivingSpeed" est plus petite (donc se rapproche de nous plus vite)
+            // que la voiture de devant, il y aura collision. On la bride donc à la même vitesse !
+            if newSpeed < carAhead.drivingSpeed {
+                newSpeed = carAhead.drivingSpeed
+            }
+        }
+        
+        // --- 2. CRÉATION DE L'OBSTACLE ---
         let obstacleGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
-        obstacleGeo.firstMaterial?.diffuse.contents = UIColor.lightGray
-        let obstacleNode = SCNNode(geometry: obstacleGeo)
+        let obstacleNode = ObstacleNode()
+        obstacleNode.geometry = obstacleGeo
+        
+        // On applique la vitesse (bridée ou non)
+        obstacleNode.drivingSpeed = newSpeed
+        
+        let colorIntensity = CGFloat(obstacleNode.drivingSpeed / 30.0)
+        obstacleGeo.firstMaterial?.diffuse.contents = UIColor(white: colorIntensity + 0.3, alpha: 1.0)
+        
         obstacleNode.position = SCNVector3(x: randomLane, y: 0.2, z: -50)
         obstacleNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
         obstacleNode.physicsBody?.categoryBitMask = CollisionCategory.obstacle
-        
-        // TRÈS IMPORTANT : On donne un nom pour le retrouver dans la boucle !
         obstacleNode.name = "obstacle"
+        
         self.rootNode.addChildNode(obstacleNode)
     }
     
@@ -199,27 +246,65 @@ class GameScene: SCNScene {
         
         // 2. Déplacer physiquement tous les objets du décor vers nous
         for node in self.rootNode.childNodes {
-            if node.name == "obstacle" || node.name == "line" {
+            
+            // --- NOUVEAU : Si le nœud est une voiture ennemie ---
+            if let obstacle = node as? ObstacleNode {
+                // Vitesse relative : (Vitesse globale du jeu) - (Vitesse de la voiture)
+                let relativeSpeed = gameSpeed - obstacle.drivingSpeed
+                obstacle.position.z += relativeSpeed * deltaTime
+                
+                if obstacle.position.z > 10 { obstacle.removeFromParentNode() }
+                
+            } else if node.name == "line" {
+                // La route, elle, défile toujours à la vitesse max (gameSpeed)
                 node.position.z += distance
                 if node.position.z > 10 { node.removeFromParentNode() }
+                
             } else if node.name == "cloud" {
-                node.position.z += distance * 0.2 // Parallaxe : les nuages sont lents
+                node.position.z += distance * 0.2
                 if node.position.z > 10 { node.removeFromParentNode() }
             }
         }
         
-        // 3. Apparition des éléments basée sur les kilomètres (Constant peu importe la vitesse !)
+        // 3. Apparition des éléments basée sur les kilomètres
         if distanceTraveled >= nextLineDistance {
             spawnLineDashes()
             nextLineDistance += 6.0
         }
+        
+        // --- LE NOUVEAU GÉNÉRATEUR DE TRAFIC ---
         if distanceTraveled >= nextObstacleDistance {
             spawnObstacle()
-            nextObstacleDistance += Float.random(in: 25.0...40.0) // Apparition un peu aléatoire
-        }
-        if distanceTraveled >= nextCloudDistance {
-            spawnCloud()
-            nextCloudDistance += Float.random(in: 80.0...150.0)
+            
+            // 1. On décrémente la vague actuelle
+            carsLeftInWave -= 1
+            
+            // 2. Si la vague est finie, on tire au sort le prochain état du trafic
+            if carsLeftInWave <= 0 {
+                let randomVal = Int.random(in: 1...100)
+                
+                if randomVal <= 15 {
+                    currentTraffic = .clear // 15% de chance d'avoir une route vide pour souffler
+                    carsLeftInWave = Int.random(in: 5...10)
+                } else if randomVal <= 50 {
+                    currentTraffic = .normal // 35% de chance de trafic normal
+                    carsLeftInWave = Int.random(in: 15...25)
+                } else {
+                    currentTraffic = .heavy // 50% de chance d'embouteillage !
+                    carsLeftInWave = Int.random(in: 30...50)
+                }
+            }
+            
+            // 3. On définit la distance jusqu'à la PROCHAINE voiture selon l'état actuel
+            switch currentTraffic {
+            case .clear:
+                nextObstacleDistance += Float.random(in: 50.0...90.0) // Loin
+            case .normal:
+                nextObstacleDistance += Float.random(in: 20.0...35.0) // Moyen
+            case .heavy:
+                // Embouteillage : Les voitures s'enchaînent tous les 6 à 12 mètres !
+                nextObstacleDistance += Float.random(in: 6.0...12.0)
+            }
         }
         
         // 4. Score lié à la distance (Le boost le fait grimper 2x plus vite !)
