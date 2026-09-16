@@ -8,8 +8,11 @@ struct ContentView: View {
     
     @State private var hasSwiped = false
     
-    // 1. On ajoute une variable d'état pour le score
     @State private var score = 0
+    
+    @AppStorage("highScore") private var highScore = 0
+    @State private var isNewRecord = false
+    @State private var recordScale: CGFloat = 1.0
     
     var body: some View {
         ZStack {
@@ -46,9 +49,16 @@ struct ContentView: View {
                     }
             )
             .onAppear {
-                scene.onGameOver = { isGameOver = true }
+                scene.onGameOver = {
+                    // Vérification du High Score AVANT d'afficher l'écran de fin
+                    if score > highScore {
+                        highScore = score
+                        isNewRecord = true
+                    }
+                    isGameOver = true
+                }
                 
-                // 2. On écoute les mises à jour du score envoyées par la 3D !
+                // On écoute les mises à jour du score envoyées par la 3D
                 scene.onScoreUpdate = { newScore in
                     score = newScore
                 }
@@ -88,28 +98,58 @@ struct ContentView: View {
             
             // --- MENU GAME OVER ---
             if isGameOver {
-                Color.black.opacity(0.7).ignoresSafeArea()
-                VStack(spacing: 30) {
+                Color.black.opacity(0.8).ignoresSafeArea() // Un peu plus sombre pour faire ressortir les couleurs
+                
+                VStack(spacing: 25) {
                     Text("GAME OVER")
                         .font(.system(size: 60, weight: .black, design: .rounded))
                         .foregroundColor(.red)
+                        .shadow(color: .red.opacity(0.5), radius: 10, x: 0, y: 0)
                     
-                    // On affiche le score final !
-                    Text("KMs Reached : \(score)")
-                        .font(.title).bold()
+                    // Score de la partie
+                    Text("Score : \(score)")
+                        .font(.system(size: 35, weight: .heavy, design: .rounded))
                         .foregroundColor(.white)
+                    
+                    // --- AFFICHAGE DU RECORD ---
+                    if isNewRecord {
+                        Text("🎉 NEW RECORD ! 🎉")
+                            .font(.title2).bold()
+                            .foregroundColor(.yellow)
+                            .scaleEffect(recordScale) // Utilise notre variable d'animation
+                            .onAppear {
+                                // Animation : grossir et rétrécir à l'infini
+                                withAnimation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                                    recordScale = 1.2
+                                }
+                            }
+                    } else {
+                        // S'il n'a pas battu le record, on lui rappelle son meilleur score
+                        Text("Best Score : \(highScore)")
+                            .font(.title3).bold()
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer().frame(height: 20)
                     
                     Button(action: {
                         scene = GameScene()
-                        scene.onGameOver = { isGameOver = true }
+                        scene.onGameOver = {
+                            if score > highScore {
+                                highScore = score
+                                isNewRecord = true
+                            }
+                            isGameOver = true
+                        }
                         
-                        // 4. IMPORTANT : On reconnecte le score pour la nouvelle partie
                         scene.onScoreUpdate = { newScore in
                             score = newScore
                         }
                         
-                        // On remet le score à zéro
+                        // On remet tout à zéro pour la nouvelle partie
                         score = 0
+                        isNewRecord = false // On éteint le drapeau du record
+                        recordScale = 1.0   // On réinitialise l'animation
                         isGameOver = false
                     }) {
                         Text("REPLAY")
@@ -134,7 +174,7 @@ struct ContentView: View {
                         isGamePaused = false
                         scene.isPaused = false // Relance le moteur 3D exactement où il s'était arrêté
                     }) {
-                        Text("REPRENDRE")
+                        Text("RESUME")
                             .font(.title2).bold()
                             .padding(.horizontal, 40)
                             .padding(.vertical, 15)
