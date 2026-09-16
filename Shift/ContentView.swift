@@ -4,6 +4,7 @@ import SceneKit
 struct ContentView: View {
     @State private var scene = GameScene()
     @State private var isGameOver = false
+    @State private var isGamePaused = false
     
     // 1. On ajoute une variable d'état pour le score
     @State private var score = 0
@@ -18,7 +19,7 @@ struct ContentView: View {
             .gesture(
                 DragGesture(minimumDistance: 20, coordinateSpace: .local)
                     .onEnded { value in
-                        if !isGameOver {
+                        if !isGameOver && !isGamePaused {
                             if value.translation.width < 0 {
                                 scene.movePlayer(direction: -1)
                             } else if value.translation.width > 0 {
@@ -38,15 +39,34 @@ struct ContentView: View {
             
             // --- HUD (L'affichage au dessus du jeu) ---
             VStack {
-                // 3. Le texte du score, centré et stylisé
-                Text("\(score)")
-                    .font(.system(size: 45, weight: .heavy, design: .rounded))
-                    .foregroundColor(.white)
-                    // Une petite ombre pour qu'il reste lisible même sur fond clair
-                    .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 2)
-                    .padding(.top, 60) // Décale un peu sous la Dynamic Island/Encoche
+                ZStack {
+                    // Bouton Pause aligné à gauche
+                    HStack {
+                        Button(action: {
+                            isGamePaused = true
+                            scene.isPaused = true // Magie SceneKit : fige tout l'univers 3D !
+                        }) {
+                            Image(systemName: "pause.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(Color.blue)
+                                .cornerRadius(10)
+                                .shadow(radius: 3)
+                        }
+                        Spacer()
+                    }
+                    
+                    // Score parfaitement centré
+                    Text("\(score)")
+                        .font(.system(size: 45, weight: .heavy, design: .rounded))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 2)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 60)
                 
-                Spacer() // Pousse le score tout en haut
+                Spacer() // Pousse le bloc de HUD vers le haut
             }
             
             // --- MENU GAME OVER ---
@@ -81,6 +101,28 @@ struct ContentView: View {
                             .padding(.vertical, 15)
                             .background(Color.white)
                             .foregroundColor(.black)
+                            .cornerRadius(15)
+                    }
+                }
+            }go
+            // --- MENU PAUSE ---
+            if isGamePaused && !isGameOver {
+                Color.black.opacity(0.7).ignoresSafeArea()
+                VStack(spacing: 30) {
+                    Text("PAUSE")
+                        .font(.system(size: 60, weight: .black, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Button(action: {
+                        isGamePaused = false
+                        scene.isPaused = false // Relance le moteur 3D exactement où il s'était arrêté
+                    }) {
+                        Text("REPRENDRE")
+                            .font(.title2).bold()
+                            .padding(.horizontal, 40)
+                            .padding(.vertical, 15)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
                             .cornerRadius(15)
                     }
                 }

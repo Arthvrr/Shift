@@ -26,9 +26,12 @@ class GameScene: SCNScene {
         setupEnvironment()
         //spawnObstacle()
         
+        prefillLineDashes()
+        
         startSpawning()
         startScoring()
         startSpawningLines()
+        startSpawningClouds()
         
         self.physicsWorld.contactDelegate = self
     }
@@ -97,27 +100,42 @@ class GameScene: SCNScene {
     }
     
     func setupEnvironment() {
-        // 1. Le ciel (fond de la scène)
-        self.background.contents = UIColor.systemTeal // Un bleu ciel clair
+        // 1. Le ciel et le Soleil
+        self.background.contents = UIColor.systemTeal
         
-        // 2. La route (un sol infini)
+        let sunGeo = SCNSphere(radius: 5.0)
+        sunGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
+        // L'émission donne l'illusion que l'objet produit de la lumière
+        sunGeo.firstMaterial?.emission.contents = UIColor.systemYellow
+        
+        let sunNode = SCNNode(geometry: sunGeo)
+        // Loin (Z = -80), haut (Y = 15), et un peu sur la droite (X = 10)
+        sunNode.position = SCNVector3(x: 10, y: 15, z: -80)
+        self.rootNode.addChildNode(sunNode)
+        
+        // 2. L'herbe (Le sol infini devient vert)
         let floorGeometry = SCNFloor()
-        floorGeometry.firstMaterial?.diffuse.contents = UIColor.darkGray
-        
+        floorGeometry.firstMaterial?.diffuse.contents = UIColor.systemGreen
+        floorGeometry.reflectivity = 0.0
         let floorNode = SCNNode(geometry: floorGeometry)
-        // On le place à Y = 0 (sous le joueur)
         floorNode.position = SCNVector3(x: 0, y: 0, z: 0)
         self.rootNode.addChildNode(floorNode)
         
-        let edgeXPositions: [Float] = [-1.2, 1.2]
+        // 3. La route en asphalte (par-dessus l'herbe)
+        // Largeur totale : de -1.2 à 1.2 = 2.4
+        let roadGeo = SCNBox(width: 2.4, height: 0.005, length: 200.0, chamferRadius: 0)
+        roadGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
+        let roadNode = SCNNode(geometry: roadGeo)
+        // On la soulève d'un millimètre (Y=0.005) pour éviter que le gris et le vert ne "clignotent"
+        roadNode.position = SCNVector3(x: 0, y: 0.005, z: -45)
+        self.rootNode.addChildNode(roadNode)
         
+        // 4. Les 2 lignes continues aux extrémités
+        let edgeXPositions: [Float] = [-1.2, 1.2]
         for x in edgeXPositions {
-            // Une boîte très longue (length: 100) pour faire une ligne continue "infinie"
             let edgeLineGeo = SCNBox(width: 0.05, height: 0.01, length: 100.0, chamferRadius: 0)
             edgeLineGeo.firstMaterial?.diffuse.contents = UIColor.white
-            
             let edgeLineNode = SCNNode(geometry: edgeLineGeo)
-            // On la place à Z = -45 pour qu'elle couvre toute la vue de la caméra (qui est à Z = 5) jusqu'à l'horizon
             edgeLineNode.position = SCNVector3(x: x, y: 0.01, z: -45)
             self.rootNode.addChildNode(edgeLineNode)
         }
@@ -178,6 +196,57 @@ class GameScene: SCNScene {
         }
     }
     
+    func prefillLineDashes() {
+        let lineXPositions: [Float] = [-0.6, 0.0, 0.6]
+        
+        // On utilise "stride" pour générer des positions Z espacées de 6 mètres : -2, -8, -14... jusqu'à -50
+        for startZ in stride(from: -2.0, through: -50.0, by: -6.0) {
+            
+            for x in lineXPositions {
+                let lineGeo = SCNBox(width: 0.05, height: 0.01, length: 1.0, chamferRadius: 0)
+                lineGeo.firstMaterial?.diffuse.contents = UIColor.white
+                
+                let lineNode = SCNNode(geometry: lineGeo)
+                // On place la ligne à sa position de départ pré-calculée
+                lineNode.position = SCNVector3(x: x, y: 0.01, z: Float(startZ))
+                self.rootNode.addChildNode(lineNode)
+                
+                // On lui applique exactement la même animation de mouvement que les autres
+                let moveAction = SCNAction.moveBy(x: 0, y: 0, z: 60, duration: 2.0)
+                let removeAction = SCNAction.removeFromParentNode()
+                let sequence = SCNAction.sequence([moveAction, removeAction])
+                
+                lineNode.runAction(sequence)
+            }
+        }
+    }
+    
+    func spawnCloud() {
+        // On crée une capsule blanche
+        let cloudGeo = SCNCapsule(capRadius: 1.5, height: 6.0)
+        cloudGeo.firstMaterial?.diffuse.contents = UIColor.white
+        
+        let cloudNode = SCNNode(geometry: cloudGeo)
+        // On la tourne de 90 degrés (Pi / 2) pour la coucher à l'horizontale
+        cloudNode.eulerAngles = SCNVector3(x: 0, y: 0, z: Float.pi / 2)
+        
+        // On génère des positions aléatoires pour que le ciel soit naturel
+        let randomX = Float.random(in: -20...20) // Très à gauche ou très à droite
+        let randomY = Float.random(in: 10...20)  // Haut dans le ciel
+        
+        // On place le nuage très loin au fond (Z = -100)
+        cloudNode.position = SCNVector3(x: randomX, y: randomY, z: -100)
+        self.rootNode.addChildNode(cloudNode)
+        
+        // L'illusion de parallaxe : les nuages avancent beaucoup plus lentement que la route !
+        // Ils parcourent 120 mètres en 15 secondes
+        let moveAction = SCNAction.moveBy(x: 0, y: 0, z: 120, duration: 30.0)
+        let removeAction = SCNAction.removeFromParentNode()
+        let sequence = SCNAction.sequence([moveAction, removeAction])
+        
+        cloudNode.runAction(sequence)
+    }
+    
     
     
     func startSpawning() {
@@ -232,6 +301,18 @@ class GameScene: SCNScene {
     }
     
     
+    func startSpawningClouds() {
+        let wait = SCNAction.wait(duration: 3.0)
+        let spawn = SCNAction.run { _ in
+            self.spawnCloud()
+        }
+        let sequence = SCNAction.sequence([wait, spawn])
+        
+        // On nomme la boucle "cloudsLoop"
+        self.rootNode.runAction(SCNAction.repeatForever(sequence), forKey: "cloudsLoop")
+    }
+    
+    
     
 }
 
@@ -241,6 +322,7 @@ extension GameScene: SCNPhysicsContactDelegate {
         self.rootNode.removeAction(forKey: "spawningLoop")
         self.rootNode.removeAction(forKey: "scoringLoop")
         self.rootNode.removeAction(forKey: "linesLoop")
+        self.rootNode.removeAction(forKey: "cloudsLoop")
         
         self.isPaused = true
         
