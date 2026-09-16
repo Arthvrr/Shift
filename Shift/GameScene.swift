@@ -1,6 +1,13 @@
 import SceneKit
 
+struct CollisionCategory {
+    static let player = 1 << 0   // Identifiant 1
+    static let obstacle = 1 << 1 // Identifiant 2
+}
+
 class GameScene: SCNScene {
+    
+    var onGameOver: (() -> Void)?
     
     // Le cube qui représentera notre joueur pour le moment
     var playerNode: SCNNode!
@@ -14,7 +21,11 @@ class GameScene: SCNScene {
         setupCamera()
         setupPlayer()
         setupEnvironment()
-        spawnObstacle()
+        //spawnObstacle()
+        
+        startSpawning()
+        
+        self.physicsWorld.contactDelegate = self
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -40,6 +51,16 @@ class GameScene: SCNScene {
         
         // On le place sur la bande de départ
         playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.2, z: 0)
+        
+        // On donne un corps physique au joueur
+        playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
+        
+        // On lui colle l'étiquette "player"
+        playerNode.physicsBody?.categoryBitMask = CollisionCategory.player
+        
+        // On demande à être prévenu s'il touche l'étiquette "obstacle"
+        playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle
+        
         self.rootNode.addChildNode(playerNode)
     }
     
@@ -95,6 +116,13 @@ class GameScene: SCNScene {
         
         // L'astuce : on le place très loin devant le joueur (Z = -50)
         obstacleNode.position = SCNVector3(x: randomLane, y: 0.2, z: -50)
+        
+        // On donne un corps physique à l'obstacle
+        obstacleNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
+        
+        // On lui colle l'étiquette "obstacle"
+        obstacleNode.physicsBody?.categoryBitMask = CollisionCategory.obstacle
+        
         self.rootNode.addChildNode(obstacleNode)
         
         // On crée l'animation : avancer de 60 mètres vers nous (vers Z positif) en 2 secondes
@@ -109,4 +137,36 @@ class GameScene: SCNScene {
         obstacleNode.runAction(sequence)
     }
     
+    func startSpawning() {
+        // 1. Action d'attente (1 seconde entre chaque voiture)
+        let wait = SCNAction.wait(duration: 1.0)
+        
+        // 2. Action qui exécute la fonction d'apparition que tu as créée juste avant
+        let spawn = SCNAction.run { _ in
+            self.spawnObstacle()
+        }
+        
+        // 3. On combine dans une séquence : Attendre -> Apparaître
+        let sequence = SCNAction.sequence([wait, spawn])
+        
+        // 4. On crée une action qui répète cette séquence à l'infini
+        let repeatForever = SCNAction.repeatForever(sequence)
+        
+        // 5. On lance la boucle (on lui donne un nom "spawningLoop" pour pouvoir l'arrêter lors d'un Game Over)
+        self.rootNode.runAction(repeatForever, forKey: "spawningLoop")
+    }
+    
+}
+
+extension GameScene: SCNPhysicsContactDelegate {
+    func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+        //print("💥 BOOM ! Collision détectée !")
+        self.rootNode.removeAction(forKey: "spawningLoop")
+        self.isPaused = true
+        
+        // On envoie le signal à SwiftUI sur le fil principal
+        DispatchQueue.main.async {
+            self.onGameOver?()
+        }
+    }
 }
