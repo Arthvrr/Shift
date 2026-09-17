@@ -112,7 +112,7 @@ class GameScene: SCNScene {
         playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.0, z: 2)
         
         // 5. HITBOX (On garde la détection physique parfaite de l'ancien cube)
-        let hitboxGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0)
+        let hitboxGeo = SCNBox(width: 0.4, height: 1, length: 0.8, chamferRadius: 0)
         let physicsShape = SCNPhysicsShape(geometry: hitboxGeo, options: nil)
         
         playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: physicsShape)
@@ -238,6 +238,25 @@ class GameScene: SCNScene {
     }
     
     func spawnObstacle() {
+        
+        // --- 0. SÉCURITÉ ANTI-MUR (Toujours laisser une issue) ---
+        var occupiedLanes = Set<Int>()
+        
+        for node in self.rootNode.childNodes {
+            if let obstacle = node as? ObstacleNode {
+                // On scanne les voitures récemment apparues (entre -50m et -35m)
+                if obstacle.position.z < -35.0 {
+                    occupiedLanes.insert(obstacle.currentLaneIndex)
+                }
+            }
+        }
+        
+        // Si 3 bandes (ou plus) sont déjà bloquées dans ce périmètre,
+        // on annule cette apparition pour laisser une porte de sortie au joueur !
+        if occupiedLanes.count >= 3 {
+            return
+        }
+        
         // --- 1. CHOIX DE LA BANDE ---
         let randomLaneIndex = Int.random(in: 0..<lanes.count)
         let randomLaneX = lanes[randomLaneIndex]
