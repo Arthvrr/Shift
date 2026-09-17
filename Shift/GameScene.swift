@@ -58,12 +58,15 @@ class GameScene: SCNScene {
     
     var lastLaneChangeTime: TimeInterval = 0.0
     
+    var carTemplates: [SCNNode] = []
+    
     override init() {
         super.init()
         setupCamera()
         setupPlayer()
         setupEnvironment()
         prefillLineDashes()
+        preloadObstacles()
         
         self.physicsWorld.contactDelegate = self
         
@@ -88,13 +91,34 @@ class GameScene: SCNScene {
     }
     
     func setupPlayer() {
-        let geometry = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
-        geometry.firstMaterial?.diffuse.contents = UIColor.systemRed
-        playerNode = SCNNode(geometry: geometry)
-        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.2, z: 2)
-        playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
+        // 1. On charge directement le fichier .usdz !
+        guard let carScene = SCNScene(named: "art.scnassets/voiture.usdz"),
+              let carModel = carScene.rootNode.childNodes.first else {
+            print("ERREUR : Impossible de charger la voiture 3D")
+            return
+        }
+        
+        playerNode = carModel
+        
+        // 2. RÉGLAGE DE L'ÉCHELLE
+        // On divise la taille par 2 par rapport à ton image
+        playerNode.scale = SCNVector3(x: 0.0025, y: 0.0025, z: 0.0025)
+        
+        // 3. ORIENTATION
+        // On décommente cette ligne pour faire pivoter la voiture de 180° sur l'axe Y
+        playerNode.eulerAngles = SCNVector3(x: 0, y: Float.pi, z: 0)
+        
+        // 4. POSITION
+        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.0, z: 2)
+        
+        // 5. HITBOX (On garde la détection physique parfaite de l'ancien cube)
+        let hitboxGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0)
+        let physicsShape = SCNPhysicsShape(geometry: hitboxGeo, options: nil)
+        
+        playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: physicsShape)
         playerNode.physicsBody?.categoryBitMask = CollisionCategory.player
         playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle | CollisionCategory.coin
+        
         self.rootNode.addChildNode(playerNode)
     }
     
@@ -182,6 +206,37 @@ class GameScene: SCNScene {
         }
     }
     
+    func preloadObstacles() {
+        // NOUVEAU DICTIONNAIRE : Il contient maintenant (Rotation, Échelle) !
+        // J'ai passé l'échelle de 0.0025 à 0.006 pour grossir les obstacles.
+        let carConfigs: [String: (rotation: Float, scale: Float)] = [
+            "car1":  (Float.pi / 2, 0.005),
+            "car2":  (Float.pi / 2, 0.005),
+            "car3":  (Float.pi / 2, 0.005),
+            "car4":  (Float.pi / 2, 0.005),
+            "car5":  (Float.pi / 2, 0.005),
+            "car6":  (Float.pi, 0.003),
+            "car7":  (Float.pi, 0.003),
+            "car8":  (Float.pi, 0.003),
+            "car9":  (Float.pi, 0.003),
+            "car10": (Float.pi, 0.003)
+        ]
+        
+        for (fileName, config) in carConfigs {
+            if let scene = SCNScene(named: "art.scnassets/\(fileName).usdz"),
+               let carModel = scene.rootNode.childNodes.first {
+                
+                // On applique la taille SUR-MESURE pour cette voiture
+                carModel.scale = SCNVector3(x: config.scale, y: config.scale, z: config.scale)
+                
+                // On applique la rotation SUR-MESURE pour cette voiture
+                carModel.eulerAngles = SCNVector3(x: 0, y: config.rotation, z: 0)
+                
+                carTemplates.append(carModel)
+            }
+        }
+    }
+    
     func spawnObstacle() {
         // --- 1. CHOIX DE LA BANDE ---
         let randomLaneIndex = Int.random(in: 0..<lanes.count)
@@ -209,18 +264,24 @@ class GameScene: SCNScene {
         }
         
         // --- 3. CRÉATION DE L'OBSTACLE ---
-        let obstacleGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0.05)
         let obstacleNode = ObstacleNode()
-        obstacleNode.geometry = obstacleGeo
-        
         obstacleNode.drivingSpeed = newSpeed
-        obstacleNode.currentLaneIndex = randomLaneIndex // NOUVEAU : On mémorise la bande
+        obstacleNode.currentLaneIndex = randomLaneIndex
         
-        let colorIntensity = CGFloat(obstacleNode.drivingSpeed / 30.0)
-        obstacleGeo.firstMaterial?.diffuse.contents = UIColor(white: colorIntensity + 0.3, alpha: 1.0)
+        // On pioche une voiture au hasard dans notre mémoire et on la clone (.clone()) !
+        if !carTemplates.isEmpty, let randomTemplate = carTemplates.randomElement() {
+            let clonedCar = randomTemplate.clone()
+            obstacleNode.addChildNode(clonedCar)
+        }
+        
+        // --- 4. PHYSIQUE ET HITBOX ---
+        // TRÈS IMPORTANT : On crée une boîte invisible très simple pour les collisions.
+        // Si on laissait le moteur calculer la hitbox sur le modèle 3D complexe, le jeu laggerait.
+        let hitboxGeo = SCNBox(width: 0.4, height: 0.4, length: 0.8, chamferRadius: 0)
+        let physicsShape = SCNPhysicsShape(geometry: hitboxGeo, options: nil)
         
         obstacleNode.position = SCNVector3(x: randomLaneX, y: 0.2, z: -50)
-        obstacleNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
+        obstacleNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: physicsShape)
         obstacleNode.physicsBody?.categoryBitMask = CollisionCategory.obstacle
         obstacleNode.name = "obstacle"
         

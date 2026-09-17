@@ -6,7 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2D0D179C305B5E3A006DB49C /* art.scnassets in Resources */ = {isa = PBXBuildFile; fileRef = 2D0D179B305B5E3A006DB49C /* art.scnassets */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		2D0D179B305B5E3A006DB49C /* art.scnassets */ = {isa = PBXFileReference; lastKnownFileType = wrapper.scnassets; path = art.scnassets; sourceTree = "<group>"; };
 		2DC8F2CA305A0B6300A64CDE /* Shift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shift.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -32,6 +37,7 @@
 		2DC8F2C1305A0B6300A64CDE = {
 			isa = PBXGroup;
 			children = (
+				2D0D179B305B5E3A006DB49C /* art.scnassets */,
 				2DC8F2CC305A0B6300A64CDE /* Shift */,
 				2DC8F2CB305A0B6300A64CDE /* Products */,
 			);
@@ -109,6 +115,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D0D179C305B5E3A006DB49C /* art.scnassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
