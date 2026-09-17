@@ -52,13 +52,15 @@ class GameScene: SCNScene {
     var onDistanceUpdate: ((Float) -> Void)?
     var lastReportedDistance: Float = 0.0
 
-    var nextCoinDistance: Float = 250.0     // Kilométrage de la prochaine pièce
+    var nextCoinDistance: Float = 100.0     // Kilométrage de la prochaine pièce
     
     var onNearMiss: (() -> Void)?
     
     var lastLaneChangeTime: TimeInterval = 0.0
     
     var carTemplates: [SCNNode] = []
+    
+    var isCrashed: Bool = false
     
     override init() {
         super.init()
@@ -545,7 +547,7 @@ class GameScene: SCNScene {
         // --- NOUVEAU : Apparition des pièces ---
         if distanceTraveled >= nextCoinDistance {
             spawnCoin()
-            nextCoinDistance += Float.random(in: 250.0...1000.0)
+            nextCoinDistance += Float.random(in: 100.0...500.0)
         }
         
         // --- LE "FAUX" CALCUL DE LA VITESSE (L'illusion d'arcade) ---
@@ -586,23 +588,51 @@ class GameScene: SCNScene {
 
 extension GameScene: SCNPhysicsContactDelegate {
     func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+            
         let nodeA = contact.nodeA
         let nodeB = contact.nodeB
         
-        // 1. Est-ce qu'on a touché une pièce ?
+        // 1. Gestion des pièces
         if nodeA.name == "coin" || nodeB.name == "coin" {
             let coinNode = nodeA.name == "coin" ? nodeA : nodeB
-            coinNode.removeFromParentNode() // La pièce disparaît !
-            
-            // On prévient l'interface de rajouter 1 coin
+            coinNode.removeFromParentNode()
             DispatchQueue.main.async { self.onCoinCollected?() }
-            return // On s'arrête là, pas de Game Over !
+            return
         }
         
-        // 2. Sinon, c'est un obstacle ! GAME OVER.
-        self.isPaused = true
+        // --- LE CRASH SIMPLE ET EFFICACE ---
+        guard !isCrashed else { return }
+        isCrashed = true
+        
+        // 1. On coupe immédiatement le moteur : la route et le trafic s'arrêtent net
         self.displayLink?.invalidate()
-        DispatchQueue.main.async {
+        
+        // 2. L'ANIMATION DE RECUL (RECOIL)
+        // La voiture rebondit violemment de 1.5 mètre en arrière
+        let recoil = SCNAction.moveBy(x: 0, y: 0, z: 1.5, duration: 0.15)
+        recoil.timingMode = .easeOut // L'animation ralentit à la fin du rebond
+        
+        // L'avant de la voiture se soulève (choc frontal) et elle tourne légèrement sur le côté
+        let randomSide = Float.random(in: -0.5...0.5)
+        let tilt = SCNAction.rotateBy(x: CGFloat(-Float.pi) / 8, y: CGFloat(randomSide), z: 0, duration: 0.15)
+        
+        // On joue les deux animations en même temps
+        let crashAnimation = SCNAction.group([recoil, tilt])
+        playerNode.runAction(crashAnimation)
+        
+        // 3. LE TREMBLEMENT DE CAMÉRA (Très rapide et sec)
+        if let cameraNode = self.rootNode.childNodes.first(where: { $0.camera != nil }) {
+            let left = SCNAction.moveBy(x: -0.5, y: -0.3, z: 0, duration: 0.05)
+            let right = SCNAction.moveBy(x: 0.5, y: 0.3, z: 0, duration: 0.05)
+            let reset = SCNAction.move(to: SCNVector3(0, 3, 5), duration: 0.05)
+            let shake = SCNAction.sequence([left, right, left, right, reset])
+            cameraNode.runAction(shake)
+        }
+        
+        // 4. FIN RAPIDE
+        // On attend juste 0.8 seconde (le temps de voir le rebond) avant d'afficher le menu
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            self.isPaused = true
             self.onGameOver?()
         }
     }
