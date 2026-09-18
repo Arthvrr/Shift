@@ -34,6 +34,8 @@ class GameScene: SCNScene {
     var displayLink: CADisplayLink?
     var gameSpeed: Float = 40.0    // Vitesse actuelle (en temps réel)
     var targetSpeed: Float = 40.0  // Vitesse que l'on cherche à atteindre (30 ou 60)
+    var accelerationRate: Float = 10.0
+    var decelerationRate : Float = 45.0
     var distanceTraveled: Float = 0
     
     // Les compteurs kilométriques pour faire apparaître de nouveaux objets
@@ -61,6 +63,8 @@ class GameScene: SCNScene {
     var carTemplates: [SCNNode] = []
     
     var isCrashed: Bool = false
+    
+    var carStats: PlayerCar!
     
     override init() {
         super.init()
@@ -93,35 +97,46 @@ class GameScene: SCNScene {
     }
     
     func setupPlayer() {
-        // 1. On charge directement le fichier .usdz !
-        guard let carScene = SCNScene(named: "art.scnassets/voiture1.usdz"),
-              let carModel = carScene.rootNode.childNodes.first else {
-            print("ERREUR : Impossible de charger la voiture 3D")
-            return
+        // 1. Lire la voiture choisie dans le Garage
+        let savedId = UserDefaults.standard.integer(forKey: "selectedCarId")
+        let carId = savedId == 0 ? 1 : savedId // Sécurité : on charge la 1 par défaut
+        
+        // 2. Récupérer ses caractéristiques depuis ton catalogue
+        self.carStats = carCatalog.first(where: { $0.id == carId }) ?? carCatalog[0]
+        
+        // 3. Initialiser les vitesses de départ avec les stats de la voiture !
+        self.gameSpeed = carStats.baseSpeed
+        self.targetSpeed = carStats.baseSpeed
+        
+        // 4. Charger le bon fichier 3D dynamique (au lieu de "voiture1" en dur)
+        if let carScene = SCNScene(named: "art.scnassets/\(carStats.modelName).usdz"),
+           let carModel = carScene.rootNode.childNodes.first {
+            
+            // ... GARDE TON CODE ACTUEL ICI POUR L'ÉCHELLE, LA ROTATION, ET LE PHYSICSBODY ...
+            
+            playerNode = carModel
+            
+            // 2. RÉGLAGE DE L'ÉCHELLE
+            // On divise la taille par 2 par rapport à ton image
+            playerNode.scale = SCNVector3(x: 0.0025, y: 0.0025, z: 0.0025)
+            
+            // 3. ORIENTATION
+            // On décommente cette ligne pour faire pivoter la voiture de 180° sur l'axe Y
+            playerNode.eulerAngles = SCNVector3(x: 0, y: Float.pi, z: 0)
+            
+            // 4. POSITION
+            playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.0, z: 2)
+            
+            // 5. HITBOX (On garde la détection physique parfaite de l'ancien cube)
+            let hitboxGeo = SCNBox(width: 0.4, height: 1, length: 0.8, chamferRadius: 0)
+            let physicsShape = SCNPhysicsShape(geometry: hitboxGeo, options: nil)
+            
+            playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: physicsShape)
+            playerNode.physicsBody?.categoryBitMask = CollisionCategory.player
+            playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle | CollisionCategory.coin
+            
+            self.rootNode.addChildNode(playerNode)
         }
-        
-        playerNode = carModel
-        
-        // 2. RÉGLAGE DE L'ÉCHELLE
-        // On divise la taille par 2 par rapport à ton image
-        playerNode.scale = SCNVector3(x: 0.0025, y: 0.0025, z: 0.0025)
-        
-        // 3. ORIENTATION
-        // On décommente cette ligne pour faire pivoter la voiture de 180° sur l'axe Y
-        playerNode.eulerAngles = SCNVector3(x: 0, y: Float.pi, z: 0)
-        
-        // 4. POSITION
-        playerNode.position = SCNVector3(x: lanes[currentLaneIndex], y: 0.0, z: 2)
-        
-        // 5. HITBOX (On garde la détection physique parfaite de l'ancien cube)
-        let hitboxGeo = SCNBox(width: 0.4, height: 1, length: 0.8, chamferRadius: 0)
-        let physicsShape = SCNPhysicsShape(geometry: hitboxGeo, options: nil)
-        
-        playerNode.physicsBody = SCNPhysicsBody(type: .kinematic, shape: physicsShape)
-        playerNode.physicsBody?.categoryBitMask = CollisionCategory.player
-        playerNode.physicsBody?.contactTestBitMask = CollisionCategory.obstacle | CollisionCategory.coin
-        
-        self.rootNode.addChildNode(playerNode)
     }
     
     func movePlayer(direction: Int) {
@@ -133,15 +148,21 @@ class GameScene: SCNScene {
             lastLaneChangeTime = CACurrentMediaTime()
             
             let targetPosition = SCNVector3(x: lanes[currentLaneIndex], y: playerNode.position.y, z: playerNode.position.z)
-            let moveAction = SCNAction.move(to: targetPosition, duration: 0.15)
+            // On utilise directement targetPosition au lieu de recréer un vecteur avec "newX" :
+            let moveAction = SCNAction.move(to: targetPosition, duration: carStats.laneChangeSpeed)
             moveAction.timingMode = .easeOut
             playerNode.runAction(moveAction)
         }
     }
     
     func setBoost(active: Bool) {
-        // On donne la vitesse cible : 60 en appuyant, retour à 30 en relâchant
-        targetSpeed = active ? 60.0 : 40.0
+        if active {
+            targetSpeed = carStats.boostSpeed
+            accelerationRate = carStats.acceleration
+        } else {
+            targetSpeed = carStats.baseSpeed
+            decelerationRate = carStats.braking // <--- NOUVEAU (On utilise le freinage de la voiture !)
+        }
     }
     
     func setupEnvironment() {
@@ -383,13 +404,6 @@ class GameScene: SCNScene {
         // 1. Calcul du déplacement selon la vitesse de croisière actuelle
         let deltaTime = Float(displayLink.targetTimestamp - displayLink.timestamp)
         
-        
-        // --- 1. ACCÉLÉRATION ET FREINAGE PROGRESSIFS ---
-        // accelerationRate à 10.0 = Il faut 3 secondes pour passer de 30 à 60
-        let accelerationRate: Float = 10.0
-        // decelerationRate à 45.0 = Frein moteur rapide (0.6 seconde pour revenir à 30)
-        let decelerationRate: Float = 45.0
-        
         if gameSpeed < targetSpeed {
             gameSpeed += accelerationRate * deltaTime
             // Sécurité : on ne dépasse pas la cible
@@ -577,11 +591,17 @@ class GameScene: SCNScene {
             nextCloudDistance += Float.random(in: 80.0...150.0)
         }
         
-        // 4. Score lié à la distance (Le boost le fait grimper 2x plus vite !)
-        if distanceTraveled >= nextScoreDistance {
+        // 4. Score lié à la distance (Corrigé pour les très hautes vitesses)
+        var didScoreUpdate = false
+        while distanceTraveled >= nextScoreDistance {
             score += 1
-            DispatchQueue.main.async { self.onScoreUpdate?(self.score) }
             nextScoreDistance += 3.0
+            didScoreUpdate = true
+        }
+        
+        // On n'envoie la mise à jour à l'interface qu'une seule fois par frame !
+        if didScoreUpdate {
+            DispatchQueue.main.async { self.onScoreUpdate?(self.score) }
         }
     }
 }

@@ -21,6 +21,8 @@ struct MainMenuView: View {
             Color.black.opacity(0.2)
                 .ignoresSafeArea()
                 .onTapGesture {
+                    // On dit juste à l'App qu'on veut jouer !
+                    // ContentView se chargera du reste.
                     appState = .playing
                 }
             
@@ -150,9 +152,34 @@ struct ContentView: View {
                         }
                     }
             )
-            .onChange(of: appState) { newValue in
-                // NOUVEAU : On relance la physique du jeu quand on passe du Menu à Playing
-                if newValue == .playing {
+            .onChange(of: appState) { oldValue, newValue in
+                if newValue == .playing && score == 0 && distance == 0.0 {
+                    // On recrée une scène totalement neuve
+                    scene = GameScene()
+                    scene.isPaused = false
+                    
+                    // On reconnecte tous les tuyaux d'interface
+                    scene.onGameOver = {
+                        if score > highScore { highScore = score; isNewRecord = true }
+                        appState = .gameOver
+                    }
+                    scene.onScoreUpdate = { newScore in score = newScore }
+                    scene.onCoinCollected = { totalCoins += 1 }
+                    scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
+                    scene.onDistanceUpdate = { newDist in distance = newDist }
+                    
+                    scene.onNearMiss = {
+                        nearMissOpacity = 0.0
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            withAnimation(.easeOut(duration: 0.05)) { nearMissOpacity = 1.0 }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                withAnimation(.easeIn(duration: 0.15)) { nearMissOpacity = 0.0 }
+                            }
+                        }
+                    }
+                }
+                // Si on sort juste d'une pause (le score n'est pas à 0)
+                else if newValue == .playing {
                     scene.isPaused = false
                 }
             }

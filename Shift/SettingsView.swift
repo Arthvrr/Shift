@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @Binding var appState: AppState
     
+    @AppStorage("totalCoins") private var totalCoins = 0
+    
     // --- SAUVEGARDE AUTOMATIQUE DES PRÉFÉRENCES ---
     @AppStorage("isMusicEnabled") private var isMusicEnabled = true
     @AppStorage("isHapticsEnabled") private var isHapticsEnabled = true
@@ -132,6 +134,10 @@ struct SettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.bold)
                         .foregroundColor(.gray.opacity(0.7))
+                        // NOUVEAU : LE CHEAT CODE DEV !
+                        .onTapGesture {
+                            totalCoins += 500000
+                        }
                 }
                 .padding(.bottom, 30)
             }

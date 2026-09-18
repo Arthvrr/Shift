@@ -44,10 +44,15 @@ struct GarageView: View {
                 
                 // --- VISUALISEUR 3D INTERACTIF ---
                 SceneView(
-                    scene: makeGarageScene(for: currentCar.modelName),
-                    options: [.autoenablesDefaultLighting, .allowsCameraControl] // <-- Déplacé ici !
+                    // NOUVEAU : On s'assure que la scène n'est générée qu'une fois
+                    scene: {
+                        let s = makeGarageScene(for: currentCar.modelName)
+                        return s
+                    }(),
+                    options: [.autoenablesDefaultLighting, .allowsCameraControl]
                 )
                 .frame(height: 300)
+                .id(currentCar.id) // TRÈS IMPORTANT : Force le rechargement de l'animation quand on change de voiture
                 
                 // --- SÉLECTEUR GAUCHE/DROITE ---
                 HStack {
