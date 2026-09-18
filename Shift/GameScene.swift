@@ -566,7 +566,7 @@ class GameScene: SCNScene {
         
         // --- LE "FAUX" CALCUL DE LA VITESSE (L'illusion d'arcade) ---
         // Le ratio magique de 2.25 permet d'afficher 90km/h quand le jeu tourne à 40m/s
-        let magicMultiplier: Float = 2.25
+        let magicMultiplier: Float = 3.2
         let currentKmH = Int(gameSpeed * magicMultiplier)
         
         if currentKmH != lastReportedSpeed {

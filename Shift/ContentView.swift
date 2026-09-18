@@ -153,7 +153,15 @@ struct ContentView: View {
                     }
             )
             .onChange(of: appState) { oldValue, newValue in
-                if newValue == .playing && score == 0 && distance == 0.0 {
+                
+                if newValue == .menu {
+                    // On recharge le décor et la nouvelle voiture choisie !
+                    scene = GameScene()
+                    scene.isPaused = true
+                }
+                
+                
+                else if newValue == .playing && score == 0 && distance == 0.0 {
                     // On recrée une scène totalement neuve
                     scene = GameScene()
                     scene.isPaused = false

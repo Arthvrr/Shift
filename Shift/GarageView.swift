@@ -79,9 +79,31 @@ struct GarageView: View {
                 
                 // --- STATISTIQUES (JAUGES) ---
                 VStack(spacing: 15) {
-                    StatBar(title: "Speed", value: currentCar.baseSpeed, max: 70.0, color: .blue)
-                    StatBar(title: "Boost", value: currentCar.boostSpeed, max: 110.0, color: .orange)
-                    StatBar(title: "Handiness", value: Float(0.20 - currentCar.laneChangeSpeed), max: 0.15, color: .green)
+                    
+                    // 1. VITESSE (Speed)
+                    StatBar(
+                        title: "Speed",
+                        value: Float((currentCar.baseSpeed - 33.0) / 10.0),
+                        max: 1.0,
+                        color: .blue
+                    )
+                    
+                    // 2. BOOST
+                    StatBar(
+                        title: "Boost",
+                        value: Float((currentCar.boostSpeed - 40.0) / 45.0),
+                        max: 1.0,
+                        color: .orange
+                    )
+                    
+                    // 3. MANIABILITÉ (Handiness)
+                    StatBar(
+                        title: "Handiness",
+                        value: Float((0.25 - currentCar.laneChangeSpeed) / 0.20),
+                        max: 1.0,
+                        color: .green
+                    )
+                    
                 }
                 .padding(.horizontal, 30)
                 .padding(.top, 20)
