@@ -139,15 +139,25 @@ struct GarageView: View {
         let scene = SCNScene()
         scene.background.contents = UIColor.clear // Fond transparent
         
+        // --- 1. CONFIGURATION DE LA CAMÉRA (TÉLÉOBJECTIF) ---
         let cameraNode = SCNNode()
-        cameraNode.camera = SCNCamera()
-        cameraNode.position = SCNVector3(0, 0.5, 3.5)
+        let camera = SCNCamera()
+        // NOUVEAU : On réduit le champ de vision (Zoom optique) pour écraser la perspective
+        camera.fieldOfView = 30
+        cameraNode.camera = camera
+        
+        // NOUVEAU : On recule énormément la caméra (z: 10) et on la monte (y: 2)
+        cameraNode.position = SCNVector3(0, 2.0, 10.0)
+        
+        // On incline légèrement la caméra vers le bas pour regarder la voiture
+        cameraNode.eulerAngles = SCNVector3(x: -0.15, y: 0, z: 0)
+        
         scene.rootNode.addChildNode(cameraNode)
         
         if let carScene = SCNScene(named: "art.scnassets/\(modelName).usdz"),
            let carModel = carScene.rootNode.childNodes.first {
             
-            // --- 1. CALCUL DE LA TAILLE ---
+            // --- 2. CALCUL DE LA TAILLE ---
             let (minBox, maxBox) = carModel.boundingBox
             let width = maxBox.x - minBox.x
             let height = maxBox.y - minBox.y
@@ -155,29 +165,26 @@ struct GarageView: View {
             
             let maxDimension = max(width, max(height, length))
             
-            // NOUVEAU : On zoome encore plus (5.5 au lieu de 4.5)
-            let idealScale = 5.5 / maxDimension
+            // On garde une taille raisonnable pour que ça rentre dans l'écran
+            let idealScale = 6.0 / maxDimension
             carModel.scale = SCNVector3(x: idealScale, y: idealScale, z: idealScale)
             
-            // --- 2. CENTRAGE GÉOMÉTRIQUE ABSOLU ---
+            // --- 3. CENTRAGE GÉOMÉTRIQUE ABSOLU ---
             let centerX = (minBox.x + maxBox.x) / 2.0 * idealScale
             let centerY = (minBox.y + maxBox.y) / 2.0 * idealScale
             let centerZ = (minBox.z + maxBox.z) / 2.0 * idealScale
             
-            // On force le cœur de la voiture à être exactement au point 0,0,0
             carModel.position = SCNVector3(-centerX, -centerY, -centerZ)
             
-            // --- 3. LE CONTENEUR INVISIBLE (WRAPPER) ---
+            // --- 4. LE CONTENEUR INVISIBLE (WRAPPER) ---
             let wrapperNode = SCNNode()
             wrapperNode.addChildNode(carModel)
             
-            // --- LE RECADRAGE FIN ---
-            // x: On décale la voiture vers la droite (+1.0)
-            // y: On remonte beaucoup la voiture vers le haut (+0.6)
-            wrapperNode.position = SCNVector3(0.75, 1, 0)
+            // NOUVEAU : La voiture est parfaitement centrée
+            wrapperNode.position = SCNVector3(0, 0.75, 0)
             
-            // On incline la boîte
-            wrapperNode.eulerAngles = SCNVector3(x: 0.15, y: -Float.pi / 5, z: 0)
+            // On incline la boîte (3/4 face)
+            wrapperNode.eulerAngles = SCNVector3(x: 0.1, y: -Float.pi / 4.5, z: 0)
             
             scene.rootNode.addChildNode(wrapperNode)
         }
