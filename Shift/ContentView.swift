@@ -1,28 +1,123 @@
 import SwiftUI
 import SceneKit
 
+// --- 1. LES ÉTATS DU JEU ---
+enum AppState {
+    case menu
+    case playing
+    case garage
+    case gameOver
+}
+
+// --- 2. LE MENU PRINCIPAL ---
+struct MainMenuView: View {
+    @Binding var appState: AppState
+    @State private var isPulsing = false
+    
+    var body: some View {
+        ZStack {
+            // Fond interactif invisible pour lancer le jeu en cliquant n'importe où
+            Color.black.opacity(0.2)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    appState = .playing
+                }
+            
+            VStack {
+                // Les Icônes du haut
+                HStack {
+                    Button(action: {
+                        appState = .garage
+                    }) {
+                        Image(systemName: "car.2.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(15)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .shadow(radius: 4)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        // Paramètres à venir
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(15)
+                            .background(Color.gray)
+                            .clipShape(Circle())
+                            .shadow(radius: 4)
+                    }
+                }
+                .padding(.horizontal, 30)
+                .padding(.top, 40)
+                
+                Spacer()
+                
+                // Titre Stylisé
+                Text("SHIFT")
+                    .font(.system(size: 80, weight: .black, design: .default))
+                    .italic()
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.8), radius: 5, x: 0, y: 5)
+                    .overlay(
+                        Text("SHIFT")
+                            .font(.system(size: 80, weight: .black, design: .default))
+                            .italic()
+                            .foregroundColor(.clear)
+                            .shadow(color: .yellow, radius: 2, x: -2, y: -2)
+                            .offset(x: 2, y: 2)
+                    )
+                
+                Spacer()
+                
+                // Texte clignotant
+                Text("TAP ANYWHERE TO PLAY")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .opacity(isPulsing ? 0.3 : 1.0)
+                    .animation(Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isPulsing)
+                    .onAppear {
+                        isPulsing = true
+                    }
+                    .padding(.bottom, 80)
+            }
+        }
+    }
+}
+
+// --- 3. LA VUE PRINCIPALE ---
 struct ContentView: View {
-    @State private var scene = GameScene()
-    @State private var isGameOver = false
+    
+    // NOUVEAU : La scène s'instancie en PAUSE pour le menu
+    @State private var scene: GameScene = {
+        let s = GameScene()
+        s.isPaused = true
+        return s
+    }()
+    
+    @State private var appState: AppState = .menu // Le jeu démarre sur le Menu
     @State private var isGamePaused = false
     
     @State private var hasSwiped = false
-    
     @State private var score = 0
     
     @AppStorage("highScore") private var highScore = 0
     @State private var isNewRecord = false
     @State private var recordScale: CGFloat = 1.0
     
-    @AppStorage("totalCoins") private var totalCoins = 0 // Sauvegarde magique sur l'iPhone !
-    @State private var speedKmH = 90 // Vitesse de base affichée
-    
+    @AppStorage("totalCoins") private var totalCoins = 0
+    @State private var speedKmH = 90
     @State private var distance: Float = 0.0
-    
     @State private var nearMissOpacity: Double = 0.0
     
     var body: some View {
         ZStack {
+            // --- LE JEU 3D (Toujours en fond) ---
             SceneView(
                 scene: scene,
                 options: [.autoenablesDefaultLighting]
@@ -31,11 +126,10 @@ struct ContentView: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .local)
                     .onChanged { value in
-                        if !isGameOver && !isGamePaused {
-                            // 1. BOOM ! On active le Boost dès que le doigt est là
+                        // NOUVEAU : On n'accepte les gestes QUE si on est en train de jouer
+                        if appState == .playing && !isGamePaused {
                             scene.setBoost(active: true)
                             
-                            // 2. On swipe si le joueur fait un mouvement fort
                             if !hasSwiped {
                                 if value.translation.width < -5 {
                                     scene.movePlayer(direction: -1)
@@ -48,33 +142,36 @@ struct ContentView: View {
                         }
                     }
                     .onEnded { _ in
-                        if !isGameOver && !isGamePaused {
-                            // 3. On relâche, vitesse normale et on réarme le swipe
+                        if appState == .playing && !isGamePaused {
                             scene.setBoost(active: false)
                             hasSwiped = false
                         }
                     }
             )
+            .onChange(of: appState) { newValue in
+                // NOUVEAU : On relance la physique du jeu quand on passe du Menu à Playing
+                if newValue == .playing {
+                    scene.isPaused = false
+                }
+            }
             .onAppear {
                 scene.onGameOver = {
                     if score > highScore {
                         highScore = score
                         isNewRecord = true
                     }
-                    isGameOver = true
+                    appState = .gameOver // NOUVEAU
                 }
                 
                 scene.onScoreUpdate = { newScore in score = newScore }
                 scene.onCoinCollected = { totalCoins += 1 }
                 scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
-                scene.onDistanceUpdate = { newDist in distance = newDist } // Connexion !
+                scene.onDistanceUpdate = { newDist in distance = newDist }
                 
                 scene.onNearMiss = {
-                    // 1. On fait apparaître le texte instantanément
                     withAnimation(.easeOut(duration: 0.1)) {
                         nearMissOpacity = 1.0
                     }
-                    // 2. On le fait disparaître en fondu après 0.8 seconde
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         withAnimation(.easeIn(duration: 0.5)) {
                             nearMissOpacity = 0.0
@@ -83,111 +180,166 @@ struct ContentView: View {
                 }
             }
             
-            // --- HUD (L'affichage au dessus du jeu) ---
-            VStack {
-                ZStack(alignment: .top) {
-                    // Bouton Pause à gauche
-                    HStack {
-                        Button(action: {
-                            isGamePaused = true
-                            scene.isPaused = true
-                        }) {
-                            Image(systemName: "pause.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 50, height: 50)
-                                .background(Color.blue)
-                                .cornerRadius(10)
-                        }
-                        Spacer()
-                    }
-                    
-                    // Score au centre
-                    Text("\(score)")
-                        .font(.system(size: 45, weight: .heavy, design: .rounded))
-                        .foregroundColor(.white)
-                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 2)
-                    
-                    // --- Vitesse, Distance et Pièces à droite ---
-                    HStack {
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 5) {
-                            Text("\(speedKmH) km/h")
-                                .font(.system(size: 18, weight: .black, design: .rounded))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.black.opacity(0.5))
-                                .cornerRadius(8)
-                            
-                            // NOUVEAU : Affichage de la distance en km (ex: "1.24 km")
-                            Text(String(format: "%.2f km", distance / 1000.0))
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.black.opacity(0.5))
-                                .cornerRadius(8)
-                            
-                            HStack(spacing: 5) {
-                                Text("\(totalCoins)")
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
+            // --- LE CONTRÔLEUR D'INTERFACE ---
+            switch appState {
+                
+            case .menu:
+                MainMenuView(appState: $appState)
+                
+            case .playing:
+                // HUD
+                VStack {
+                    ZStack(alignment: .top) {
+                        HStack {
+                            Button(action: {
+                                isGamePaused = true
+                                scene.isPaused = true
+                            }) {
+                                Image(systemName: "pause.fill")
+                                    .font(.title2)
                                     .foregroundColor(.white)
-                                Image(systemName: "c.circle.fill")
-                                    .foregroundColor(.yellow)
-                                    .font(.title3)
+                                    .frame(width: 50, height: 50)
+                                    .background(Color.blue)
+                                    .cornerRadius(10)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(8)
+                            Spacer()
+                        }
+                        
+                        Text("\(score)")
+                            .font(.system(size: 45, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 2)
+                        
+                        HStack {
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 5) {
+                                Text("\(speedKmH) km/h")
+                                    .font(.system(size: 18, weight: .black, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.black.opacity(0.5))
+                                    .cornerRadius(8)
+                                
+                                Text(String(format: "%.2f km", distance / 1000.0))
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.black.opacity(0.5))
+                                    .cornerRadius(8)
+                                
+                                HStack(spacing: 5) {
+                                    Text("\(totalCoins)")
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                    Image(systemName: "c.circle.fill")
+                                        .foregroundColor(.yellow)
+                                        .font(.title3)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 60)
+                    
+                    Spacer()
+                }
+                
+                // NEAR MISS
+                Text("🔥 NEAR MISS ! 🔥\n+10")
+                    .font(.system(size: 30, weight: .black, design: .rounded))
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+                    .shadow(color: .red, radius: 5, x: 0, y: 0)
+                    .opacity(nearMissOpacity)
+                    .offset(y: -50)
+                
+                // MENU PAUSE
+                if isGamePaused {
+                    Color.black.opacity(0.7).ignoresSafeArea()
+                    VStack(spacing: 30) {
+                        Text("PAUSE")
+                            .font(.system(size: 60, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        Button(action: {
+                            isGamePaused = false
+                            scene.isPaused = false
+                        }) {
+                            Text("RESUME")
+                                .font(.title2).bold()
+                                .padding(.horizontal, 40)
+                                .padding(.vertical, 15)
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(15)
+                        }
+                        Button(action: {
+                            appState = .menu
+                            isGamePaused = false
+                            
+                            // On recrée une route propre en pause
+                            scene = GameScene()
+                            scene.isPaused = true
+                            
+                            // On reconnecte l'interface
+                            scene.onGameOver = {
+                                if score > highScore { highScore = score; isNewRecord = true }
+                                appState = .gameOver
+                            }
+                            scene.onScoreUpdate = { newScore in score = newScore }
+                            scene.onCoinCollected = { totalCoins += 1 }
+                            scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
+                            scene.onDistanceUpdate = { newDist in distance = newDist }
+                            
+                            score = 0
+                            distance = 0.0
+                            speedKmH = 90
+                        }) {
+                            Text("MAIN MENU")
+                                .font(.title2).bold()
+                                .padding(.horizontal, 40)
+                                .padding(.vertical, 15)
+                                .background(Color.gray)
+                                .foregroundColor(.white)
+                                .cornerRadius(15)
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 60)
                 
-                Spacer() // Pousse le bloc de HUD vers le haut
-            }
-            
-            // --- ANIMATION NEAR MISS ---
-            Text("🔥 NEAR MISS ! 🔥\n+10")
-                .font(.system(size: 30, weight: .black, design: .rounded))
-                .foregroundColor(.orange)
-                .multilineTextAlignment(.center)
-                .shadow(color: .red, radius: 5, x: 0, y: 0)
-                .opacity(nearMissOpacity)
-                .offset(y: -50) // Le remonte un peu au-dessus du joueur
-            
-            // --- MENU GAME OVER ---
-            if isGameOver {
-                Color.black.opacity(0.8).ignoresSafeArea() // Un peu plus sombre pour faire ressortir les couleurs
+            case .garage:
+                GarageView(appState: $appState)
                 
+            case .gameOver:
+                Color.black.opacity(0.8).ignoresSafeArea()
+                
+                // LA BOÎTE VERTICALE COMMENCE ICI
                 VStack(spacing: 25) {
                     Text("GAME OVER")
                         .font(.system(size: 60, weight: .black, design: .rounded))
                         .foregroundColor(.red)
                         .shadow(color: .red.opacity(0.5), radius: 10, x: 0, y: 0)
                     
-                    // Score de la partie
                     Text("Score : \(score)")
                         .font(.system(size: 35, weight: .heavy, design: .rounded))
                         .foregroundColor(.white)
                     
-                    // --- AFFICHAGE DU RECORD ---
                     if isNewRecord {
                         Text("🎉 NEW RECORD ! 🎉")
                             .font(.title2).bold()
                             .foregroundColor(.yellow)
-                            .scaleEffect(recordScale) // Utilise notre variable d'animation
+                            .scaleEffect(recordScale)
                             .onAppear {
-                                // Animation : grossir et rétrécir à l'infini
                                 withAnimation(Animation.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
                                     recordScale = 1.2
                                 }
                             }
                     } else {
-                        // S'il n'a pas battu le record, on lui rappelle son meilleur score
                         Text("Best Score : \(highScore)")
                             .font(.title3).bold()
                             .foregroundColor(.gray)
@@ -195,51 +347,39 @@ struct ContentView: View {
                     
                     Spacer().frame(height: 20)
                     
+                    // --- BOUTON 1 : REPLAY ---
                     Button(action: {
                         scene = GameScene()
+                        scene.isPaused = false
+                        
                         scene.onGameOver = {
-                            if score > highScore {
-                                highScore = score
-                                isNewRecord = true
-                            }
-                            isGameOver = true
+                            if score > highScore { highScore = score; isNewRecord = true }
+                            appState = .gameOver
                         }
                         
                         scene.onScoreUpdate = { newScore in score = newScore }
-                        
-                        // LES VOICI ! On reconnecte tout à la nouvelle scène
                         scene.onCoinCollected = { totalCoins += 1 }
                         scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
                         scene.onDistanceUpdate = { newDist in distance = newDist }
                         
                         scene.onNearMiss = {
-                            // 1. Coupe instantanément l'ancienne animation si on enchaîne deux esquives
                             nearMissOpacity = 0.0
-                            
-                            // 2. Un micro-délai pour que l'interface ait le temps de clignoter
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                // Apparition fulgurante (0.05 seconde)
-                                withAnimation(.easeOut(duration: 0.05)) {
-                                    nearMissOpacity = 1.0
-                                }
-                                
-                                // Disparition très rapide juste après (0.2 seconde plus tard)
+                                withAnimation(.easeOut(duration: 0.05)) { nearMissOpacity = 1.0 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    withAnimation(.easeIn(duration: 0.15)) {
-                                        nearMissOpacity = 0.0
-                                    }
+                                    withAnimation(.easeIn(duration: 0.15)) { nearMissOpacity = 0.0 }
                                 }
                             }
                         }
                         
-                        // On remet l'interface à zéro pour la nouvelle partie
                         score = 0
                         distance = 0.0
                         speedKmH = 90
                         isNewRecord = false
                         recordScale = 1.0
                         nearMissOpacity = 0.0
-                        isGameOver = false
+                        
+                        appState = .playing
                     }) {
                         Text("REPLAY")
                             .font(.title2).bold()
@@ -249,25 +389,34 @@ struct ContentView: View {
                             .foregroundColor(.black)
                             .cornerRadius(15)
                     }
-                }
-            }
-            // --- MENU PAUSE ---
-            if isGamePaused && !isGameOver {
-                Color.black.opacity(0.7).ignoresSafeArea()
-                VStack(spacing: 30) {
-                    Text("PAUSE")
-                        .font(.system(size: 60, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
                     
+                    // --- BOUTON 2 : MAIN MENU (Maintenant bien à l'intérieur de la VStack !) ---
                     Button(action: {
-                        isGamePaused = false
-                        scene.isPaused = false // Relance le moteur 3D exactement où il s'était arrêté
+                        appState = .menu
+                        
+                        scene = GameScene()
+                        scene.isPaused = true
+                        
+                        scene.onGameOver = {
+                            if score > highScore { highScore = score; isNewRecord = true }
+                            appState = .gameOver
+                        }
+                        scene.onScoreUpdate = { newScore in score = newScore }
+                        scene.onCoinCollected = { totalCoins += 1 }
+                        scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
+                        scene.onDistanceUpdate = { newDist in distance = newDist }
+                        
+                        score = 0
+                        distance = 0.0
+                        speedKmH = 90
+                        isNewRecord = false
+                        recordScale = 1.0
                     }) {
-                        Text("RESUME")
+                        Text("MAIN MENU")
                             .font(.title2).bold()
                             .padding(.horizontal, 40)
                             .padding(.vertical, 15)
-                            .background(Color.blue)
+                            .background(Color.gray.opacity(0.8))
                             .foregroundColor(.white)
                             .cornerRadius(15)
                     }

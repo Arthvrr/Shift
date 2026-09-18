@@ -94,7 +94,7 @@ class GameScene: SCNScene {
     
     func setupPlayer() {
         // 1. On charge directement le fichier .usdz !
-        guard let carScene = SCNScene(named: "art.scnassets/voiture.usdz"),
+        guard let carScene = SCNScene(named: "art.scnassets/voiture1.usdz"),
               let carModel = carScene.rootNode.childNodes.first else {
             print("ERREUR : Impossible de charger la voiture 3D")
             return
