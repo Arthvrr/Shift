@@ -156,6 +156,7 @@ struct ContentView: View {
                 
                 if newValue == .menu {
                     // On recharge le décor et la nouvelle voiture choisie !
+                    scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
                     scene = GameScene()
                     scene.isPaused = true
                 }
@@ -163,6 +164,7 @@ struct ContentView: View {
                 
                 else if newValue == .playing && score == 0 && distance == 0.0 {
                     // On recrée une scène totalement neuve
+                    scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
                     scene = GameScene()
                     scene.isPaused = false
                     
@@ -323,6 +325,7 @@ struct ContentView: View {
                             isGamePaused = false
                             
                             // On recrée une route propre en pause
+                            scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
                             scene = GameScene()
                             scene.isPaused = true
                             
@@ -389,6 +392,7 @@ struct ContentView: View {
                     
                     // --- BOUTON 1 : REPLAY ---
                     Button(action: {
+                        scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
                         scene = GameScene()
                         scene.isPaused = false
                         
@@ -434,6 +438,7 @@ struct ContentView: View {
                     Button(action: {
                         appState = .menu
                         
+                        scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
                         scene = GameScene()
                         scene.isPaused = true
                         

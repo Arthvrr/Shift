@@ -624,8 +624,10 @@ extension GameScene: SCNPhysicsContactDelegate {
         guard !isCrashed else { return }
         isCrashed = true
         
-        // 1. On coupe immédiatement le moteur : la route et le trafic s'arrêtent net
+        // 1. On fige l'image et on coupe le moteur IMMÉDIATEMENT
+        self.isPaused = true
         self.displayLink?.invalidate()
+        self.displayLink = nil // On efface toute trace du moteur
         
         // 2. L'ANIMATION DE RECUL (RECOIL)
         // La voiture rebondit violemment de 1.5 mètre en arrière
