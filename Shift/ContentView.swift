@@ -7,6 +7,7 @@ enum AppState {
     case playing
     case garage
     case gameOver
+    case settings
 }
 
 // --- 2. LE MENU PRINCIPAL ---
@@ -41,7 +42,7 @@ struct MainMenuView: View {
                     Spacer()
                     
                     Button(action: {
-                        // Paramètres à venir
+                        appState = .settings // <-- L'action est maintenant connectée !
                     }) {
                         Image(systemName: "gearshape.fill")
                             .font(.title2)
@@ -111,6 +112,7 @@ struct ContentView: View {
     @State private var recordScale: CGFloat = 1.0
     
     @AppStorage("totalCoins") private var totalCoins = 0
+    @AppStorage("speedUnit") private var speedUnit = "km/h"
     @State private var speedKmH = 90
     @State private var distance: Float = 0.0
     @State private var nearMissOpacity: Double = 0.0
@@ -213,7 +215,9 @@ struct ContentView: View {
                         HStack {
                             Spacer()
                             VStack(alignment: .trailing, spacing: 5) {
-                                Text("\(speedKmH) km/h")
+                                let displaySpeed = speedUnit == "mph" ? Int(Double(speedKmH) * 0.621371) : speedKmH
+                                
+                                Text("\(displaySpeed) \(speedUnit)")
                                     .font(.system(size: 18, weight: .black, design: .rounded))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 10)
@@ -312,8 +316,9 @@ struct ContentView: View {
                     }
                 }
                 
-            case .garage:
-                GarageView(appState: $appState)
+            case .garage: GarageView(appState: $appState)
+                
+            case .settings: SettingsView(appState:$appState)
                 
             case .gameOver:
                 Color.black.opacity(0.8).ignoresSafeArea()
@@ -421,7 +426,9 @@ struct ContentView: View {
                             .cornerRadius(15)
                     }
                 }
+                
             }
+            
         }
     }
 }
