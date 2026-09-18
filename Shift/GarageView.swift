@@ -56,15 +56,20 @@ struct GarageView: View {
                             .font(.largeTitle).foregroundColor(currentIndex > 0 ? .white : .gray)
                     }
                     Spacer()
+                    
                     Text(currentCar.name)
                         .font(.system(size: 35, weight: .black, design: .rounded))
                         .foregroundColor(.white)
+                        .lineLimit(1)                      // MAGIE 1 : Force 1 seule ligne
+                        .minimumScaleFactor(0.4)           // MAGIE 2 : Réduit la police si c'est trop long
+                    
                     Spacer()
                     Button(action: { if currentIndex < carCatalog.count - 1 { currentIndex += 1 } }) {
                         Image(systemName: "arrowtriangle.right.fill")
                             .font(.largeTitle).foregroundColor(currentIndex < carCatalog.count - 1 ? .white : .gray)
                     }
                 }
+                .frame(height: 50) // MAGIE 3 : Hauteur fixe pour que rien ne saute en dessous !
                 .padding(.horizontal, 40)
                 
                 // --- STATISTIQUES (JAUGES) ---
@@ -132,25 +137,49 @@ struct GarageView: View {
     // Fonction qui génère une scène 3D propre juste pour afficher la voiture
     func makeGarageScene(for modelName: String) -> SCNScene {
         let scene = SCNScene()
+        scene.background.contents = UIColor.clear // Fond transparent
         
-        // 1. Fond transparent pour laisser passer le gris de SwiftUI
-        scene.background.contents = UIColor.clear
-        
-        // 2. On ajoute explicitement une caméra (Essentiel pour allowsCameraControl !)
         let cameraNode = SCNNode()
         cameraNode.camera = SCNCamera()
-        cameraNode.position = SCNVector3(0, 1, 5) // On recule pour bien voir la voiture
+        cameraNode.position = SCNVector3(0, 0.5, 3.5)
         scene.rootNode.addChildNode(cameraNode)
         
-        // 3. On charge la voiture
         if let carScene = SCNScene(named: "art.scnassets/\(modelName).usdz"),
            let carModel = carScene.rootNode.childNodes.first {
             
-            carModel.scale = SCNVector3(x: 0.015, y: 0.015, z: 0.015)
-            carModel.position = SCNVector3(0, -0.5, 0)
-            carModel.eulerAngles = SCNVector3(x: 0.2, y: -Float.pi / 6, z: 0)
+            // --- 1. CALCUL DE LA TAILLE ---
+            let (minBox, maxBox) = carModel.boundingBox
+            let width = maxBox.x - minBox.x
+            let height = maxBox.y - minBox.y
+            let length = maxBox.z - minBox.z
             
-            scene.rootNode.addChildNode(carModel)
+            let maxDimension = max(width, max(height, length))
+            
+            // NOUVEAU : On zoome encore plus (5.5 au lieu de 4.5)
+            let idealScale = 5.5 / maxDimension
+            carModel.scale = SCNVector3(x: idealScale, y: idealScale, z: idealScale)
+            
+            // --- 2. CENTRAGE GÉOMÉTRIQUE ABSOLU ---
+            let centerX = (minBox.x + maxBox.x) / 2.0 * idealScale
+            let centerY = (minBox.y + maxBox.y) / 2.0 * idealScale
+            let centerZ = (minBox.z + maxBox.z) / 2.0 * idealScale
+            
+            // On force le cœur de la voiture à être exactement au point 0,0,0
+            carModel.position = SCNVector3(-centerX, -centerY, -centerZ)
+            
+            // --- 3. LE CONTENEUR INVISIBLE (WRAPPER) ---
+            let wrapperNode = SCNNode()
+            wrapperNode.addChildNode(carModel)
+            
+            // --- LE RECADRAGE FIN ---
+            // x: On décale la voiture vers la droite (+1.0)
+            // y: On remonte beaucoup la voiture vers le haut (+0.6)
+            wrapperNode.position = SCNVector3(0.75, 1, 0)
+            
+            // On incline la boîte
+            wrapperNode.eulerAngles = SCNVector3(x: 0.15, y: -Float.pi / 5, z: 0)
+            
+            scene.rootNode.addChildNode(wrapperNode)
         }
         
         return scene
