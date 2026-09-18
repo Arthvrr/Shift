@@ -74,9 +74,9 @@ struct GarageView: View {
                 
                 // --- STATISTIQUES (JAUGES) ---
                 VStack(spacing: 15) {
-                    StatBar(title: "Vitesse", value: currentCar.baseSpeed, max: 70.0, color: .blue)
+                    StatBar(title: "Speed", value: currentCar.baseSpeed, max: 70.0, color: .blue)
                     StatBar(title: "Boost", value: currentCar.boostSpeed, max: 110.0, color: .orange)
-                    StatBar(title: "Maniabilité", value: Float(0.20 - currentCar.laneChangeSpeed), max: 0.15, color: .green)
+                    StatBar(title: "Handiness", value: Float(0.20 - currentCar.laneChangeSpeed), max: 0.15, color: .green)
                 }
                 .padding(.horizontal, 30)
                 .padding(.top, 20)
@@ -115,7 +115,7 @@ struct GarageView: View {
                         }
                     }) {
                         HStack {
-                            Text("ACHETER - \(currentCar.price)")
+                            Text("BUY - \(currentCar.price)")
                             Image(systemName: "c.circle.fill")
                         }
                         .font(.title2).bold()
@@ -185,6 +185,14 @@ struct GarageView: View {
             
             // On incline la boîte (3/4 face)
             wrapperNode.eulerAngles = SCNVector3(x: 0.1, y: -Float.pi / 4.5, z: 0)
+            
+            let spinAction = SCNAction.rotateBy(x: 0, y: CGFloat(Float.pi * 2), z: 0, duration: 10.0)
+                        
+            // On dit à l'action de se répéter à l'infini
+            let infiniteSpin = SCNAction.repeatForever(spinAction)
+            
+            // On l'applique au conteneur de la voiture
+            wrapperNode.runAction(infiniteSpin)
             
             scene.rootNode.addChildNode(wrapperNode)
         }
