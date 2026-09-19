@@ -7,6 +7,7 @@ struct SettingsView: View {
     
     // --- SAUVEGARDE AUTOMATIQUE DES PRÉFÉRENCES ---
     @AppStorage("isMusicEnabled") private var isMusicEnabled = true
+    @AppStorage("isSfxEnabled") private var isSfxEnabled = true
     @AppStorage("isHapticsEnabled") private var isHapticsEnabled = true
     @AppStorage("speedUnit") private var speedUnit = "km/h"
     @AppStorage("weatherSetting") private var weatherSetting = "Sun"
@@ -41,11 +42,22 @@ struct SettingsView: View {
                 }
                 .padding()
                 
-                // --- 2. BOUTONS MUSIC & VIBRATION ---
-                HStack(spacing: 50) {
-                    Button(action: { isMusicEnabled.toggle() }) {
+                // --- 2. BOUTONS MUSIC, SFX & VIBRATION ---
+                // J'ai réduit l'espacement à 30 pour faire rentrer les 3 boutons
+                HStack(spacing: 30) {
+                    
+                    // BOUTON MUSIQUE
+                    Button(action: {
+                        isMusicEnabled.toggle()
+                        // ACTION DIRECTE : Si on coupe, ça s'arrête de suite. Si on allume, la musique du menu reprend.
+                        if isMusicEnabled {
+                            SoundManager.shared.playBGM(filename: "menu_bgm")
+                        } else {
+                            SoundManager.shared.stopBGM()
+                        }
+                    }) {
                         VStack {
-                            Image(systemName: isMusicEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            Image(systemName: isMusicEnabled ? "music.note" : "music.note")
                                 .font(.system(size: 40))
                                 .foregroundColor(isMusicEnabled ? .green : .red)
                             Text("Music")
@@ -55,6 +67,20 @@ struct SettingsView: View {
                         }
                     }
                     
+                    // BOUTON EFFETS SONORES (SFX)
+                    Button(action: { isSfxEnabled.toggle() }) {
+                        VStack {
+                            Image(systemName: isSfxEnabled ? "speaker.wave.3.fill" : "speaker.slash.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(isSfxEnabled ? .green : .red)
+                            Text("SFX")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.top, 5)
+                        }
+                    }
+                    
+                    // BOUTON HAPTICS
                     Button(action: { isHapticsEnabled.toggle() }) {
                         VStack {
                             Image(systemName: isHapticsEnabled ? "iphone.radiowaves.left.and.right" : "iphone.slash")

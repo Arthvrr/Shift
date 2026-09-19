@@ -66,6 +66,8 @@ class GameScene: SCNScene {
     
     var carStats: PlayerCar!
     
+    var isBoosting: Bool = false
+    
     override init() {
         super.init()
         setupCamera()
@@ -159,10 +161,16 @@ class GameScene: SCNScene {
         if active {
             targetSpeed = carStats.boostSpeed
             accelerationRate = carStats.acceleration
-            SoundManager.shared.playSFX(filename: "boost") // <-- LE SON DU BOOST !
+            
+            // On déclenche le "coup de pied" haptique uniquement au moment où on touche l'écran
+            if !isBoosting {
+                isBoosting = true
+                HapticManager.shared.playBoost() // <-- NOUVEAU (Le petit choc sec)
+            }
         } else {
             targetSpeed = carStats.baseSpeed
             decelerationRate = carStats.braking
+            isBoosting = false
         }
     }
     
@@ -630,10 +638,10 @@ extension GameScene: SCNPhysicsContactDelegate {
         self.displayLink?.invalidate()
         self.displayLink = nil // On efface toute trace du moteur
         
-        // --- NOUVEAU : GESTION AUDIO DU CRASH ---
+        // --- NOUVEAU : GESTION AUDIO ET HAPTIQUE DU CRASH ---
         SoundManager.shared.stopBGM()
         SoundManager.shared.playSFX(filename: "crash")
-
+        HapticManager.shared.playCrash() // <-- NOUVEAU (La double vibration lourde de Game Over)
         
         // 2. L'ANIMATION DE RECUL (RECOIL)
         // La voiture rebondit violemment de 1.5 mètre en arrière

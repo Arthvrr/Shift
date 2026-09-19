@@ -7,10 +7,22 @@ class SoundManager {
     var bgmPlayer: AVAudioPlayer?
     var sfxPlayers: [AVAudioPlayer] = []
     
+    // On mémorise quelle musique est en train de jouer pour ne pas la relancer pour rien
+    var currentBGMFilename: String = ""
+    
     private init() {}
     
     // --- MUSIQUE DE FOND ---
     func playBGM(filename: String, extensionType: String = "mp3") {
+        // 1. On vérifie si la musique est activée dans les réglages (Par défaut : true)
+        let isMusicEnabled = UserDefaults.standard.object(forKey: "isMusicEnabled") as? Bool ?? true
+        guard isMusicEnabled else { return } // Si c'est sur OFF, on annule
+        
+        // 2. Si la musique demandée est DÉJÀ en train de jouer, on ne fait rien !
+        if bgmPlayer?.isPlaying == true && currentBGMFilename == filename {
+            return
+        }
+        
         guard let url = Bundle.main.url(forResource: filename, withExtension: extensionType) else {
             print("Fichier musique \(filename) introuvable.")
             return
@@ -18,9 +30,10 @@ class SoundManager {
         
         do {
             bgmPlayer = try AVAudioPlayer(contentsOf: url)
-            bgmPlayer?.numberOfLoops = -1 // Boucle infinie
-            bgmPlayer?.volume = 0.8       // VOLUME BAISSÉ (30%) pour ne pas être trop fort
+            bgmPlayer?.numberOfLoops = -1
+            bgmPlayer?.volume = 0.8 // Ton volume à 80%
             bgmPlayer?.play()
+            currentBGMFilename = filename // On enregistre ce qu'on écoute
         } catch {
             print("Erreur de lecture BGM : \(error.localizedDescription)")
         }
@@ -28,10 +41,15 @@ class SoundManager {
     
     func stopBGM() {
         bgmPlayer?.stop()
+        currentBGMFilename = ""
     }
     
     // --- EFFETS SONORES (SFX) ---
-    func playSFX(filename: String, extensionType: String = "mp3") { // J'ai mis "mp3" par défaut car c'est ce que tu as importé
+    func playSFX(filename: String, extensionType: String = "mp3") {
+        // 1. On vérifie si les SFX sont activés (Par défaut : true)
+        let isSfxEnabled = UserDefaults.standard.object(forKey: "isSfxEnabled") as? Bool ?? true
+        guard isSfxEnabled else { return } // Si c'est sur OFF, on annule
+        
         guard let url = Bundle.main.url(forResource: filename, withExtension: extensionType) else {
             print("Fichier son \(filename) introuvable.")
             return
@@ -39,7 +57,7 @@ class SoundManager {
         
         do {
             let player = try AVAudioPlayer(contentsOf: url)
-            player.volume = 1.0 // VOLUME MAX (100%)
+            player.volume = 1.0 // Volume à 100%
             player.play()
             
             sfxPlayers.append(player)

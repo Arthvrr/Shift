@@ -154,11 +154,14 @@ struct ContentView: View {
             )
             .onChange(of: appState) { oldValue, newValue in
                 
-                if newValue == .menu {
-                    SoundManager.shared.stopBGM() // Arrêt de la musique au menu
-                    scene.displayLink?.invalidate()
-                    scene = GameScene()
-                    scene.isPaused = true
+                if newValue == .menu || newValue == .garage || newValue == .settings {
+                    SoundManager.shared.playBGM(filename: "menu_bgm")
+                    
+                    if newValue == .menu {
+                        scene.displayLink?.invalidate()
+                        scene = GameScene()
+                        scene.isPaused = true
+                    }
                 }
                 
                 else if newValue == .playing && score == 0 && distance == 0.0 {
@@ -180,6 +183,7 @@ struct ContentView: View {
                     scene.onNearMiss = {
                         // LE SON DU NEAR MISS ICI !
                         SoundManager.shared.playSFX(filename: "nearmiss")
+                        HapticManager.shared.playNearMiss()
                         
                         nearMissOpacity = 0.0
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -199,6 +203,9 @@ struct ContentView: View {
                 }
             }
             .onAppear {
+                
+                SoundManager.shared.playBGM(filename: "menu_bgm")
+                
                 scene.onGameOver = {
                     if score > highScore {
                         highScore = score
