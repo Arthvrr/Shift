@@ -155,20 +155,19 @@ struct ContentView: View {
             .onChange(of: appState) { oldValue, newValue in
                 
                 if newValue == .menu {
-                    // On recharge le décor et la nouvelle voiture choisie !
-                    scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
+                    SoundManager.shared.stopBGM() // Arrêt de la musique au menu
+                    scene.displayLink?.invalidate()
                     scene = GameScene()
                     scene.isPaused = true
                 }
                 
-                
                 else if newValue == .playing && score == 0 && distance == 0.0 {
-                    // On recrée une scène totalement neuve
-                    scene.displayLink?.invalidate() // <-- ON TUE LE ZOMBIE !
+                    SoundManager.shared.playBGM(filename: "bgm") // DÉMARRAGE MUSIQUE
+                    
+                    scene.displayLink?.invalidate()
                     scene = GameScene()
                     scene.isPaused = false
                     
-                    // On reconnecte tous les tuyaux d'interface
                     scene.onGameOver = {
                         if score > highScore { highScore = score; isNewRecord = true }
                         appState = .gameOver
@@ -179,6 +178,9 @@ struct ContentView: View {
                     scene.onDistanceUpdate = { newDist in distance = newDist }
                     
                     scene.onNearMiss = {
+                        // LE SON DU NEAR MISS ICI !
+                        SoundManager.shared.playSFX(filename: "nearmiss")
+                        
                         nearMissOpacity = 0.0
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             withAnimation(.easeOut(duration: 0.05)) { nearMissOpacity = 1.0 }
@@ -188,9 +190,12 @@ struct ContentView: View {
                         }
                     }
                 }
-                // Si on sort juste d'une pause (le score n'est pas à 0)
                 else if newValue == .playing {
+                    SoundManager.shared.playBGM(filename: "bgm") // REPRISE APRÈS PAUSE
                     scene.isPaused = false
+                }
+                else if newValue == .gameOver || newValue == .garage || newValue == .settings {
+                    SoundManager.shared.stopBGM() // On coupe la musique partout ailleurs
                 }
             }
             .onAppear {
@@ -233,6 +238,7 @@ struct ContentView: View {
                             Button(action: {
                                 isGamePaused = true
                                 scene.isPaused = true
+                                SoundManager.shared.stopBGM()
                             }) {
                                 Image(systemName: "pause.fill")
                                     .font(.title2)
@@ -311,6 +317,7 @@ struct ContentView: View {
                         Button(action: {
                             isGamePaused = false
                             scene.isPaused = false
+                            SoundManager.shared.playBGM(filename: "bgm")
                         }) {
                             Text("RESUME")
                                 .font(.title2).bold()

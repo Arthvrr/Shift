@@ -159,9 +159,10 @@ class GameScene: SCNScene {
         if active {
             targetSpeed = carStats.boostSpeed
             accelerationRate = carStats.acceleration
+            SoundManager.shared.playSFX(filename: "boost") // <-- LE SON DU BOOST !
         } else {
             targetSpeed = carStats.baseSpeed
-            decelerationRate = carStats.braking // <--- NOUVEAU (On utilise le freinage de la voiture !)
+            decelerationRate = carStats.braking
         }
     }
     
@@ -624,10 +625,15 @@ extension GameScene: SCNPhysicsContactDelegate {
         guard !isCrashed else { return }
         isCrashed = true
         
-        // 1. On fige l'image et on coupe le moteur IMMÉDIATEMENT
+        // 1. On fige l'image, on coupe la musique et on joue le crash IMMÉDIATEMENT
         self.isPaused = true
         self.displayLink?.invalidate()
         self.displayLink = nil // On efface toute trace du moteur
+        
+        // --- NOUVEAU : GESTION AUDIO DU CRASH ---
+        SoundManager.shared.stopBGM()
+        SoundManager.shared.playSFX(filename: "crash")
+
         
         // 2. L'ANIMATION DE RECUL (RECOIL)
         // La voiture rebondit violemment de 1.5 mètre en arrière

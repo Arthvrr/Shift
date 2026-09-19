@@ -3,10 +3,9 @@
 - ≠ températures (en fonction de l'heure à laquelle on joue ! ou params, brouillard)
 - ≠ mode de jeu (bombe en voiture, contre la montre,...)
 - diamant payant sur l'app pour revivre et etc... (avec vidéo pour revivre)
-- tableau de bord statistique (voitures dépassée, vitesse moyenne)
 - faire un mini tuto au début du jeu
 - musique générée par IA pendant le jeu
 - combo de near misses
-- icone d'appli
 - mettre un véhicule ultra rare à voir dans les véhicules obstacles
 - autres easter eggs
+- page de statistiques globales (nombre voitures dépassées, voiture pref, nombre de crash,...)
