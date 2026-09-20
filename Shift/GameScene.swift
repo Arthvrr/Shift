@@ -56,7 +56,7 @@ class GameScene: SCNScene {
 
     var nextCoinDistance: Float = 100.0     // Kilométrage de la prochaine pièce
     
-    var onNearMiss: (() -> Void)?
+    //var onNearMiss: (() -> Void)?
     
     var lastLaneChangeTime: TimeInterval = 0.0
     
@@ -67,6 +67,12 @@ class GameScene: SCNScene {
     var carStats: PlayerCar!
     
     var isBoosting: Bool = false
+    
+    // --- VARIABLES DE COMBO NEAR MISS ---
+    var nearMissCombo: Int = 0
+    var lastNearMissTime: TimeInterval = 0.0
+    let comboTimeout: TimeInterval = 4.0 // 4 secondes pour enchaîner
+    var onNearMiss: ((Int, Int) -> Void)?
     
     override init() {
         super.init()
@@ -247,11 +253,16 @@ class GameScene: SCNScene {
             "car3":  (Float.pi / 2, 0.005),
             "car4":  (Float.pi / 2, 0.005),
             "car5":  (Float.pi / 2, 0.005),
-            "car6":  (Float.pi, 0.003),
-            "car7":  (Float.pi, 0.003),
-            "car8":  (Float.pi, 0.003),
-            "car9":  (Float.pi, 0.003),
-            "car10": (Float.pi, 0.003)
+            "car6":  (Float.pi, 0.0035),
+            "car7":  (Float.pi, 0.0035),
+            "car8":  (Float.pi, 0.0035),
+            "car9":  (Float.pi, 0.0035),
+            "car10": (Float.pi, 0.003),
+            "car11":  (Float.pi / 2, 0.0035),
+            "car12":  (Float.pi / 2, 0.005),
+            "car13": (Float.pi, 0.0015),
+            "car14": (Float.pi, 0.0015),
+            "car15": (Float.pi, 0.008)
         ]
         
         for (fileName, config) in carConfigs {
@@ -436,36 +447,69 @@ class GameScene: SCNScene {
                 let relativeSpeed = gameSpeed - obstacle.drivingSpeed
                 obstacle.position.z += relativeSpeed * deltaTime
                 
-                // 2. IA DE CHANGEMENT DE VOIE
-                // On déclenche la décision quand la voiture arrive à 35 mètres de nous
-                if obstacle.position.z > -35.0 && !obstacle.hasDecidedToTurn {
+                // --- 2. IA AVANCÉE : RADAR ET COMPORTEMENT ---
+                                
+                // A. Le Radar : On scanne ce qui se passe devant notre voiture
+                var carAhead: ObstacleNode? = nil
+                var distanceToCarAhead: Float = 100.0
+                
+                for otherNode in self.rootNode.childNodes {
+                    if let otherCar = otherNode as? ObstacleNode, otherCar != obstacle {
+                        if otherCar.currentLaneIndex == obstacle.currentLaneIndex {
+                            // Si otherCar est devant nous (Z plus proche de 0)
+                            let dist = otherCar.position.z - obstacle.position.z
+                            if dist > 0 && dist < distanceToCarAhead {
+                                distanceToCarAhead = dist
+                                carAhead = otherCar
+                            }
+                        }
+                    }
+                }
+                
+                // B. L'Anti-Collision (Freinage)
+                if let ahead = carAhead, distanceToCarAhead < 25.0 {
+                    // Rappel de ta logique : drivingSpeed élevé = voiture lente.
+                    // Donc si notre voiture est plus rapide (drivingSpeed < ahead.drivingSpeed), on freine !
+                    if obstacle.drivingSpeed < ahead.drivingSpeed {
+                        obstacle.drivingSpeed += 15.0 * deltaTime // On ralentit progressivement
+                    }
+                }
+                
+                // C. Décision de changement de voie (Dépassement)
+                if obstacle.position.z > -40.0 && !obstacle.hasDecidedToTurn {
                     obstacle.hasDecidedToTurn = true // Décision prise une seule fois
                     
-                    // 30% de chance d'essayer de changer de bande
-                    if Int.random(in: 1...100) <= 30 {
+                    // La magie est ici :
+                    // - Route dégagée = 15% de chance de tourner (flânerie)
+                    // - Bloqué par une voiture à moins de 35m = 85% de chance de forcer le passage !
+                    var chanceToTurn = 15
+                    if let _ = carAhead, distanceToCarAhead < 35.0 {
+                        chanceToTurn = 85
+                    }
+                    
+                    if Int.random(in: 1...100) <= chanceToTurn {
                         var possibleDirections: [Int] = []
-                        if obstacle.currentLaneIndex > 0 { possibleDirections.append(-1) } // Peut aller à gauche
-                        if obstacle.currentLaneIndex < lanes.count - 1 { possibleDirections.append(1) } // Peut aller à droite
+                        if obstacle.currentLaneIndex > 0 { possibleDirections.append(-1) }
+                        if obstacle.currentLaneIndex < lanes.count - 1 { possibleDirections.append(1) }
                         
                         if let dir = possibleDirections.randomElement() {
                             let targetIndex = obstacle.currentLaneIndex + dir
                             
-                            // SÉCURITÉ : Vérifier si la bande cible est libre
+                            // SÉCURITÉ : Vérifier si la bande cible est libre (Ton super code anti-ghosting)
                             var isSafe = true
                             for otherNode in self.rootNode.childNodes {
                                 if let otherCar = otherNode as? ObstacleNode, otherCar != obstacle {
                                     if otherCar.currentLaneIndex == targetIndex {
-                                        // Si une autre voiture est à moins de 15m (devant ou derrière), on annule !
-                                        if abs(otherCar.position.z - obstacle.position.z) < 15.0 {
-                                            isSafe = false
-                                            break
-                                        }
+                                        let distanceDiff = otherCar.position.z - obstacle.position.z
+                                        
+                                        if abs(distanceDiff) < 22.0 { isSafe = false; break }
+                                        if distanceDiff < 0 && otherCar.drivingSpeed < obstacle.drivingSpeed { isSafe = false; break }
+                                        if distanceDiff > 0 && otherCar.drivingSpeed > obstacle.drivingSpeed { isSafe = false; break }
                                     }
                                 }
                             }
                             
                             if isSafe {
-                                // On valide le changement ! On "réserve" la bande tout de suite.
                                 obstacle.currentLaneIndex = targetIndex
                                 obstacle.targetX = lanes[targetIndex]
                             }
@@ -485,25 +529,34 @@ class GameScene: SCNScene {
                     }
                 }
                 
-                // --- 4. DÉTECTION DU NEAR MISS ---
+                // --- 4. DÉTECTION DU NEAR MISS (AVEC COMBO) ---
                 let dz = abs(obstacle.position.z - playerNode.position.z)
                 let dx = abs(obstacle.position.x - playerNode.position.x)
-                
-                // NOUVEAU : Est-ce qu'on vient de donner un coup de volant ?
-                // Le mouvement dure 0.15s, on laisse 0.4s de fenêtre pour être généreux
                 let currentTime = CACurrentMediaTime()
                 let isDodging = (currentTime - lastLaneChangeTime) < 0.15
                 
-                // On ajoute "isDodging" à la validation !
                 if dz < 0.7 && dx > 0.45 && dx < 0.75 && !obstacle.hasScoredNearMiss && isDodging {
                     obstacle.hasScoredNearMiss = true
                     
-                    let bonus = (targetSpeed > 40.0) ? 20 : 10
-                    score += bonus
+                    // 1. GESTION DU TIMEOUT DU COMBO
+                    if currentTime - lastNearMissTime > comboTimeout {
+                        nearMissCombo = 0 // On réinitialise si on a été trop lent
+                    }
+                    
+                    // 2. INCRÉMENTATION DU COMBO
+                    nearMissCombo += 1
+                    lastNearMissTime = currentTime
+                    
+                    // 3. CALCUL DES POINTS (La base + le multiplicateur)
+                    let baseBonus = (targetSpeed > 40.0) ? 20 : 10
+                    let totalBonus = baseBonus * nearMissCombo
+                    
+                    score += totalBonus
                     
                     DispatchQueue.main.async {
                         self.onScoreUpdate?(self.score)
-                        self.onNearMiss?()
+                        // On envoie le numéro du combo et les points gagnés à l'interface !
+                        self.onNearMiss?(self.nearMissCombo, totalBonus)
                     }
                 }
                 

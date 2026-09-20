@@ -117,7 +117,9 @@ struct ContentView: View {
     @AppStorage("speedUnit") private var speedUnit = "km/h"
     @State private var speedKmH = 90
     @State private var distance: Float = 0.0
+    
     @State private var nearMissOpacity: Double = 0.0
+    @State private var currentComboInfo: String = "🔥 NEAR MISS ! 🔥\n+10"
     
     var body: some View {
         ZStack {
@@ -180,15 +182,21 @@ struct ContentView: View {
                     scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
                     scene.onDistanceUpdate = { newDist in distance = newDist }
                     
-                    scene.onNearMiss = {
-                        // LE SON DU NEAR MISS ICI !
+                    scene.onNearMiss = { comboMultiplier, pointsEarned in
                         SoundManager.shared.playSFX(filename: "nearmiss")
                         HapticManager.shared.playNearMiss()
+                        
+                        // ON CRÉE LE TEXTE SELON LE COMBO !
+                        if comboMultiplier > 1 {
+                            currentComboInfo = "🔥 COMBO x\(comboMultiplier) ! 🔥\n+\(pointsEarned)"
+                        } else {
+                            currentComboInfo = "🔥 NEAR MISS ! 🔥\n+\(pointsEarned)"
+                        }
                         
                         nearMissOpacity = 0.0
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             withAnimation(.easeOut(duration: 0.05)) { nearMissOpacity = 1.0 }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Un peu plus long (0.5s) pour avoir le temps de lire le combo
                                 withAnimation(.easeIn(duration: 0.15)) { nearMissOpacity = 0.0 }
                             }
                         }
@@ -219,13 +227,22 @@ struct ContentView: View {
                 scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
                 scene.onDistanceUpdate = { newDist in distance = newDist }
                 
-                scene.onNearMiss = {
-                    withAnimation(.easeOut(duration: 0.1)) {
-                        nearMissOpacity = 1.0
+                scene.onNearMiss = { comboMultiplier, pointsEarned in
+                    SoundManager.shared.playSFX(filename: "nearmiss")
+                    HapticManager.shared.playNearMiss()
+                    
+                    // ON CRÉE LE TEXTE SELON LE COMBO !
+                    if comboMultiplier > 1 {
+                        currentComboInfo = "🔥 COMBO x\(comboMultiplier) ! 🔥\n+\(pointsEarned)"
+                    } else {
+                        currentComboInfo = "🔥 NEAR MISS ! 🔥\n+\(pointsEarned)"
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        withAnimation(.easeIn(duration: 0.5)) {
-                            nearMissOpacity = 0.0
+                    
+                    nearMissOpacity = 0.0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        withAnimation(.easeOut(duration: 0.05)) { nearMissOpacity = 1.0 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            withAnimation(.easeIn(duration: 0.15)) { nearMissOpacity = 0.0 }
                         }
                     }
                 }
@@ -304,10 +321,10 @@ struct ContentView: View {
                     Spacer()
                 }
                 
-                // NEAR MISS
-                Text("🔥 NEAR MISS ! 🔥\n+10")
+                // NEAR MISS TEXT
+                Text(currentComboInfo)
                     .font(.system(size: 30, weight: .black, design: .rounded))
-                    .foregroundColor(.orange)
+                    .foregroundColor(currentComboInfo.contains("COMBO") ? .yellow : .orange) // Devient jaune vif si c'est un combo !
                     .multilineTextAlignment(.center)
                     .shadow(color: .red, radius: 5, x: 0, y: 0)
                     .opacity(nearMissOpacity)
@@ -420,11 +437,21 @@ struct ContentView: View {
                         scene.onSpeedUpdate = { newSpeed in speedKmH = newSpeed }
                         scene.onDistanceUpdate = { newDist in distance = newDist }
                         
-                        scene.onNearMiss = {
+                        scene.onNearMiss = { comboMultiplier, pointsEarned in
+                            SoundManager.shared.playSFX(filename: "nearmiss")
+                            HapticManager.shared.playNearMiss()
+                            
+                            // ON CRÉE LE TEXTE SELON LE COMBO !
+                            if comboMultiplier > 1 {
+                                currentComboInfo = "🔥 COMBO x\(comboMultiplier) ! 🔥\n+\(pointsEarned)"
+                            } else {
+                                currentComboInfo = "🔥 NEAR MISS ! 🔥\n+\(pointsEarned)"
+                            }
+                            
                             nearMissOpacity = 0.0
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 withAnimation(.easeOut(duration: 0.05)) { nearMissOpacity = 1.0 }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                     withAnimation(.easeIn(duration: 0.15)) { nearMissOpacity = 0.0 }
                                 }
                             }
