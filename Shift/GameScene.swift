@@ -74,6 +74,12 @@ class GameScene: SCNScene {
     let comboTimeout: TimeInterval = 4.0 // 4 secondes pour enchaîner
     var onNearMiss: ((Int, Int) -> Void)?
     
+    var nextTreeDistance: Float = 10.0
+    
+    var nextLightDistance: Float = 20.0
+    
+    var nextSignDistance: Float = 150.0 // Le premier panneau apparaîtra à 150m
+    
     override init() {
         super.init()
         setupCamera()
@@ -391,6 +397,128 @@ class GameScene: SCNScene {
         self.rootNode.addChildNode(cloudNode)
     }
     
+    func spawnTree() {
+        let treeNode = SCNNode()
+        
+        // Le Tronc (très fin, marron)
+        let trunkGeo = SCNCylinder(radius: 0.15, height: 1.5)
+        trunkGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.55, green: 0.27, blue: 0.07, alpha: 1.0) // Marron SaddleBrown
+        let trunk = SCNNode(geometry: trunkGeo)
+        trunk.position = SCNVector3(x: 0, y: 0.75, z: 0)
+        
+        // Le Feuillage "Cyprès Italien" (Cône grand et fin, vert sombre)
+        let leavesGeo = SCNCone(topRadius: 0.0, bottomRadius: 0.8, height: 4.0)
+        leavesGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.13, green: 0.55, blue: 0.13, alpha: 1.0) // Vert Forêt
+        let leaves = SCNNode(geometry: leavesGeo)
+        leaves.position = SCNVector3(x: 0, y: 3.0, z: 0) // Au dessus du tronc
+        
+        treeNode.addChildNode(trunk)
+        treeNode.addChildNode(leaves)
+        
+        // On le place soit à gauche, soit à droite de la route, bien sur le bord
+        let sideX: Float = Bool.random() ? -3.0 : 3.0
+        
+        // On peut varier un peu l'éloignement (Z) pour qu'ils n'apparaissent pas toujours à la même distance
+        let spawnZ = Float.random(in: -120.0 ... -90.0)
+        treeNode.position = SCNVector3(x: sideX, y: 0, z: spawnZ)
+        
+        treeNode.name = "tree" // IMPORTANT pour la boucle de rendu
+        self.rootNode.addChildNode(treeNode)
+    }
+    
+    func spawnStreetLight() {
+        let lightNode = SCNNode()
+        
+        // Le Mât (grand poteau gris)
+        let poleGeo = SCNCylinder(radius: 0.08, height: 6.0)
+        poleGeo.firstMaterial?.diffuse.contents = UIColor.lightGray
+        let pole = SCNNode(geometry: poleGeo)
+        pole.position = SCNVector3(x: 0, y: 3.0, z: 0)
+        
+        // Le Bras (qui avance vers la route)
+        let armGeo = SCNCylinder(radius: 0.05, height: 1.5)
+        armGeo.firstMaterial?.diffuse.contents = UIColor.lightGray
+        let arm = SCNNode(geometry: armGeo)
+        // On le tourne pour qu'il soit horizontal
+        arm.eulerAngles = SCNVector3(x: 0, y: 0, z: Float.pi / 2)
+        arm.position = SCNVector3(x: -0.75, y: 6.0, z: 0) // Décalé vers la gauche (vers la route)
+        
+        // L'Ampoule (petite sphère brillante)
+        let bulbGeo = SCNSphere(radius: 0.15)
+        bulbGeo.firstMaterial?.diffuse.contents = UIColor(white: 0.9, alpha: 1.0)
+        bulbGeo.firstMaterial?.emission.contents = UIColor.yellow // Brille un peu
+        let bulb = SCNNode(geometry: bulbGeo)
+        bulb.position = SCNVector3(x: -1.4, y: 5.9, z: 0) // Au bout du bras
+        
+        lightNode.addChildNode(pole)
+        lightNode.addChildNode(arm)
+        lightNode.addChildNode(bulb)
+        
+        // On les place uniquement à droite de la route pour créer une ligne continue
+        // On les met un peu plus loin de la route que les voitures (ex: 2.2)
+        lightNode.position = SCNVector3(x: 2.2, y: 0, z: -100)
+        
+        lightNode.name = "streetLight"
+        self.rootNode.addChildNode(lightNode)
+    }
+    
+    func spawnSign() {
+        let signNode = SCNNode()
+        let isOverhead = Bool.random() // 50% de chance grand panneau / 50% petit sur le côté
+        
+        // Matériaux partagés (pour consommer moins de mémoire)
+        let poleMaterial = SCNMaterial()
+        poleMaterial.diffuse.contents = UIColor.lightGray
+        let signMaterial = SCNMaterial()
+        signMaterial.diffuse.contents = UIColor(red: 0.0, green: 0.3, blue: 0.7, alpha: 1.0) // Bleu Autoroute
+        
+        if isOverhead {
+            // --- PANNEAU GÉANT (AU-DESSUS DES 4 VOIES) ---
+            // On a réduit la hauteur des piliers de 6.0 à 4.2
+            let pillarGeo = SCNBox(width: 0.2, height: 4.2, length: 0.2, chamferRadius: 0)
+            pillarGeo.materials = [poleMaterial]
+            
+            let leftPillar = SCNNode(geometry: pillarGeo)
+            leftPillar.position = SCNVector3(x: -2.5, y: 2.1, z: 0) // y est la moitié de la hauteur (4.2 / 2)
+            let rightPillar = SCNNode(geometry: pillarGeo)
+            rightPillar.position = SCNVector3(x: 2.5, y: 2.1, z: 0)
+            
+            let beamGeo = SCNBox(width: 5.2, height: 0.2, length: 0.2, chamferRadius: 0)
+            beamGeo.materials = [poleMaterial]
+            let beam = SCNNode(geometry: beamGeo)
+            beam.position = SCNVector3(x: 0, y: 4.2, z: 0) // Baissé à 4.2
+            
+            let boardGeo = SCNBox(width: 3.5, height: 1.5, length: 0.1, chamferRadius: 0)
+            boardGeo.materials = [signMaterial]
+            let board = SCNNode(geometry: boardGeo)
+            board.position = SCNVector3(x: 0, y: 4.2, z: 0.1) // Baissé à 4.2
+            
+            signNode.addChildNode(leftPillar)
+            signNode.addChildNode(rightPillar)
+            signNode.addChildNode(beam)
+            signNode.addChildNode(board)
+            
+        } else {
+            // --- PANNEAU LATÉRAL (À DROITE) ---
+            let poleGeo = SCNBox(width: 0.15, height: 3.0, length: 0.15, chamferRadius: 0)
+            poleGeo.materials = [poleMaterial]
+            let pole = SCNNode(geometry: poleGeo)
+            pole.position = SCNVector3(x: 2.5, y: 1.5, z: 0) // Sur le bord droit
+            
+            let boardGeo = SCNBox(width: 1.8, height: 1.2, length: 0.1, chamferRadius: 0)
+            boardGeo.materials = [signMaterial]
+            let board = SCNNode(geometry: boardGeo)
+            board.position = SCNVector3(x: 2.5, y: 3.0, z: 0.1)
+            
+            signNode.addChildNode(pole)
+            signNode.addChildNode(board)
+        }
+        
+        signNode.position = SCNVector3(x: 0, y: 0, z: -120) // On les fait popper très loin
+        signNode.name = "sign"
+        self.rootNode.addChildNode(signNode)
+    }
+    
     
     func spawnCoin() {
         guard let randomLane = lanes.randomElement() else { return }
@@ -576,6 +704,18 @@ class GameScene: SCNScene {
             } else if node.name == "cloud" {
                 node.position.z += distance * 0.2
                 if node.position.z > 10 { node.removeFromParentNode() }
+            
+            } else if node.name == "tree" {
+                node.position.z += distance
+                if node.position.z > 10 { node.removeFromParentNode() }
+            
+            } else if node.name == "streetLight" {
+                node.position.z += distance
+                if node.position.z > 10 { node.removeFromParentNode() }
+            
+            } else if node.name == "sign" {
+                node.position.z += distance
+                if node.position.z > 10 { node.removeFromParentNode() }
             }
         }
         
@@ -624,6 +764,27 @@ class GameScene: SCNScene {
         if distanceTraveled >= nextCoinDistance {
             spawnCoin()
             nextCoinDistance += Float.random(in: 100.0...500.0)
+        }
+        
+        if distanceTraveled >= nextTreeDistance {
+            // On peut même en faire apparaître deux d'un coup parfois (gauche et droite)
+            spawnTree()
+            if Bool.random() { spawnTree() }
+            
+            // Un nouvel arbre apparaît tous les 15 à 30 mètres
+            nextTreeDistance += Float.random(in: 15.0...30.0)
+        }
+        
+        if distanceTraveled >= nextLightDistance {
+            spawnStreetLight()
+            // Un nouveau lampadaire TOUS LES 40 MÈTRES, de façon très stricte
+            nextLightDistance += 100.0
+        }
+        
+        if distanceTraveled >= nextSignDistance {
+            spawnSign()
+            // Un panneau apparaît aléatoirement tous les 150 à 400 mètres
+            nextSignDistance += Float.random(in: 150.0...400.0)
         }
         
         // --- LE "FAUX" CALCUL DE LA VITESSE (L'illusion d'arcade) ---
