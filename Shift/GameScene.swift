@@ -6,6 +6,12 @@ enum TrafficCondition {
     case heavy       // Embouteillage (très dense !)
 }
 
+enum Biome {
+    case forest
+    case bridge
+    case tunnel
+}
+
 struct CollisionCategory {
     static let player = 1 << 0
     static let obstacle = 1 << 1
@@ -79,6 +85,19 @@ class GameScene: SCNScene {
     var nextLightDistance: Float = 20.0
     
     var nextSignDistance: Float = 150.0 // Le premier panneau apparaîtra à 150m
+    
+    var currentBiome: Biome = .forest
+    var biomeDistance: Float = 0.0 // Pour savoir quand changer de zone
+    var targetBiomeLength: Float = 1600.0
+    
+    var nextTunnelArchDistance: Float = 0.0
+    var nextBridgeSegmentDistance: Float = 0.0
+    
+    // On garde une référence pour pouvoir les cacher dans le tunnel
+    var floorNode: SCNNode!
+    var sunNode: SCNNode!
+    
+    var currentBiomeFloorY: Float = 0.001
     
     override init() {
         super.init()
@@ -190,62 +209,36 @@ class GameScene: SCNScene {
         // 1. Le ciel (Tu peux changer la couleur selon l'ambiance que tu veux)
         self.background.contents = UIColor.systemTeal
         
-        // 2. Le soleil (On le recule à Z = -450 pour qu'il soit derrière la ville !)
+        // 2. Le soleil
         let sunGeo = SCNSphere(radius: 15.0)
         sunGeo.firstMaterial?.diffuse.contents = UIColor.systemYellow
         sunGeo.firstMaterial?.emission.contents = UIColor.systemYellow
-        let sunNode = SCNNode(geometry: sunGeo)
+        sunNode = SCNNode(geometry: sunGeo) // MODIFIÉ ICI
         sunNode.position = SCNVector3(x: 30, y: 40, z: -450)
         self.rootNode.addChildNode(sunNode)
         
-        // --- 3. NOUVEAU : LE DÉCOR "HORIZON CHASE" ---
-        // On crée un écran géant de 400m de large sur 100m de haut
-        let horizonGeo = SCNPlane(width: 400.0, height: 100.0)
-        
-        // On lui applique ton image PNG
-        if let bgImage = UIImage(named: "horizon") {
-            horizonGeo.firstMaterial?.diffuse.contents = bgImage
-        } else {
-            // Si Xcode ne trouve pas l'image, il affichera un mur gris pour tester
-            horizonGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
-        }
-        
-        let horizonNode = SCNNode(geometry: horizonGeo)
-        
-        // On le place très loin (Z = -400) pour respecter la limite de vision de ta caméra (Z = 500)
-        // La valeur Y = 30 surélève la ville pour qu'elle se pose sur la ligne d'horizon
-        horizonNode.position = SCNVector3(x: 0, y: 30, z: -400)
-        
-        // Petite astuce : on l'incline très légèrement vers l'arrière pour qu'il soit
-        // bien perpendiculaire au regard de notre caméra qui penche vers le bas
-        horizonNode.eulerAngles = SCNVector3(x: -Float.pi / 16, y: 0, z: 0)
-        
-        self.rootNode.addChildNode(horizonNode)
-        // ---------------------------------------------
-        
-        // 4. Le sol infini
+        // --- 4. LE SOL INFINI ---
         let floorGeometry = SCNFloor()
-        // Tu peux changer la couleur ici si tu veux faire un désert ou de la neige !
         floorGeometry.firstMaterial?.diffuse.contents = UIColor.systemGreen
         floorGeometry.reflectivity = 0.0
-        let floorNode = SCNNode(geometry: floorGeometry)
+        floorNode = SCNNode(geometry: floorGeometry) // On sauvegarde la référence ici !
         floorNode.position = SCNVector3(x: 0, y: 0, z: 0)
         self.rootNode.addChildNode(floorNode)
         
         // 5. La route en asphalte
-        let roadGeo = SCNBox(width: 2.4, height: 0.005, length: 200.0, chamferRadius: 0)
+        let roadGeo = SCNBox(width: 2.4, height: 0.005, length: 1500.0, chamferRadius: 0)
         roadGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
         let roadNode = SCNNode(geometry: roadGeo)
-        roadNode.position = SCNVector3(x: 0, y: 0.005, z: -45)
+        roadNode.position = SCNVector3(x: 0, y: 0.005, z: -600)
         self.rootNode.addChildNode(roadNode)
         
         // 6. Les lignes blanches sur le bord de route
         let edgeXPositions: [Float] = [-1.2, 1.2]
         for x in edgeXPositions {
-            let edgeLineGeo = SCNBox(width: 0.05, height: 0.01, length: 100.0, chamferRadius: 0)
+            let edgeLineGeo = SCNBox(width: 0.05, height: 0.01, length: 1500.0, chamferRadius: 0)
             edgeLineGeo.firstMaterial?.diffuse.contents = UIColor.white
             let edgeLineNode = SCNNode(geometry: edgeLineGeo)
-            edgeLineNode.position = SCNVector3(x: x, y: 0.01, z: -45)
+            edgeLineNode.position = SCNVector3(x: x, y: 0.01, z: -600)
             self.rootNode.addChildNode(edgeLineNode)
         }
     }
@@ -424,6 +417,141 @@ class GameScene: SCNScene {
         
         treeNode.name = "tree" // IMPORTANT pour la boucle de rendu
         self.rootNode.addChildNode(treeNode)
+    }
+    
+    func spawnTunnelArchNode() -> SCNNode {
+        let archNode = SCNNode()
+        
+        // Murs gauche et droit (Gris sombre)
+        let wallGeo = SCNBox(width: 1.0, height: 6.0, length: 4.0, chamferRadius: 0)
+        wallGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
+        
+        let leftWall = SCNNode(geometry: wallGeo)
+        leftWall.position = SCNVector3(-3.0, 3.0, 0)
+        let rightWall = SCNNode(geometry: wallGeo)
+        rightWall.position = SCNVector3(3.0, 3.0, 0)
+        
+        // Plafond (Gris sombre)
+        let roofGeo = SCNBox(width: 7.0, height: 1.0, length: 4.0, chamferRadius: 0)
+        roofGeo.firstMaterial?.diffuse.contents = UIColor.darkGray
+        let roof = SCNNode(geometry: roofGeo)
+        roof.position = SCNVector3(0, 6.5, 0)
+        
+        // Néon orange au plafond !
+        let lightGeo = SCNBox(width: 2.0, height: 0.1, length: 0.5, chamferRadius: 0)
+        lightGeo.firstMaterial?.diffuse.contents = UIColor.orange
+        lightGeo.firstMaterial?.emission.contents = UIColor.orange
+        let light = SCNNode(geometry: lightGeo)
+        light.position = SCNVector3(0, 5.95, 0)
+        
+        archNode.addChildNode(leftWall)
+        archNode.addChildNode(rightWall)
+        archNode.addChildNode(roof)
+        archNode.addChildNode(light)
+        
+        archNode.position = SCNVector3(0, 0, -120)
+        archNode.name = "tunnel"
+        self.rootNode.addChildNode(archNode)
+        
+        archNode.name = "tunnel"
+        return archNode
+    }
+        
+    func spawnBridgeSegmentNode() -> SCNNode {
+        let bridgeNode = SCNNode()
+        
+        // 1. Glissières rouges (Allongées à 60m au lieu de 20m)
+        let railingGeo = SCNBox(width: 0.2, height: 0.8, length: 60.0, chamferRadius: 0)
+        railingGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0)
+        
+        let leftRailing = SCNNode(geometry: railingGeo)
+        leftRailing.position = SCNVector3(-1.3, 0.4, 0)
+        let rightRailing = SCNNode(geometry: railingGeo)
+        rightRailing.position = SCNVector3(1.3, 0.4, 0)
+        
+        bridgeNode.addChildNode(leftRailing)
+        bridgeNode.addChildNode(rightRailing)
+        
+        // 2. Les Piliers du pont suspendu (Ils héritent de la couleur rouge !)
+        let pillarGeo = SCNBox(width: 0.4, height: 12.0, length: 0.4, chamferRadius: 0)
+        pillarGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0) // MODIFIÉ : Rouge
+        
+        let leftPillar = SCNNode(geometry: pillarGeo)
+        leftPillar.position = SCNVector3(-1.5, 6.0, 0)
+        let rightPillar = SCNNode(geometry: pillarGeo)
+        rightPillar.position = SCNVector3(1.5, 6.0, 0)
+        
+        bridgeNode.addChildNode(leftPillar)
+        bridgeNode.addChildNode(rightPillar)
+        
+        bridgeNode.name = "bridge"
+        return bridgeNode
+    }
+    
+    func spawnBiomeFloor(color: UIColor, biome: Biome) {
+        
+        let biomeFloorNode = SCNNode()
+        
+        // 1. La grande plaque de sol (4000m de long pour couvrir tout le biome !)
+        let biomeFloorGeo = SCNPlane(width: 2000.0, height: 4000.0)
+        biomeFloorGeo.firstMaterial?.diffuse.contents = color
+        let floor = SCNNode(geometry: biomeFloorGeo)
+        floor.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
+        floor.position = SCNVector3(0, 0, 0)
+        biomeFloorNode.addChildNode(floor)
+        
+        // 2. LA PORTE D'ENTRÉE DU BIOME (Située sur le bord avant de la plaque)
+        if biome == .tunnel {
+            // Un vrai portique découpé (Mur Gauche, Mur Droit, Toit)
+            let facadeMat = SCNMaterial()
+            facadeMat.diffuse.contents = UIColor(white: 0.1, alpha: 1.0)
+            
+            let leftFGeo = SCNBox(width: 20.0, height: 20.0, length: 0.5, chamferRadius: 0)
+            leftFGeo.materials = [facadeMat]
+            let leftF = SCNNode(geometry: leftFGeo)
+            leftF.position = SCNVector3(-12.5, 10.0, 2000.0)
+            
+            let rightFGeo = SCNBox(width: 20.0, height: 20.0, length: 0.5, chamferRadius: 0)
+            rightFGeo.materials = [facadeMat]
+            let rightF = SCNNode(geometry: rightFGeo)
+            rightF.position = SCNVector3(12.5, 10.0, 2000.0)
+            
+            let topFGeo = SCNBox(width: 5.0, height: 14.0, length: 0.5, chamferRadius: 0)
+            topFGeo.materials = [facadeMat]
+            let topF = SCNNode(geometry: topFGeo)
+            topF.position = SCNVector3(0, 13.0, 2000.0)
+            
+            biomeFloorNode.addChildNode(leftF)
+            biomeFloorNode.addChildNode(rightF)
+            biomeFloorNode.addChildNode(topF)
+            
+        } else if biome == .bridge {
+            let pillarGeo = SCNBox(width: 0.8, height: 15.0, length: 0.8, chamferRadius: 0)
+            pillarGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0)
+            
+            let leftPillar = SCNNode(geometry: pillarGeo)
+            leftPillar.position = SCNVector3(-2.0, 7.5, 2000.0)
+            let rightPillar = SCNNode(geometry: pillarGeo)
+            rightPillar.position = SCNVector3(2.0, 7.5, 2000.0)
+            
+            let topBeamGeo = SCNBox(width: 4.8, height: 0.8, length: 0.8, chamferRadius: 0)
+            topBeamGeo.firstMaterial?.diffuse.contents = UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0)
+            let topBeam = SCNNode(geometry: topBeamGeo)
+            topBeam.position = SCNVector3(0, 14.6, 2000.0)
+            
+            biomeFloorNode.addChildNode(leftPillar)
+            biomeFloorNode.addChildNode(rightPillar)
+            biomeFloorNode.addChildNode(topBeam)
+        }
+        
+        // On monte la plaque d'un millimètre pour la superposer à la précédente proprement
+        currentBiomeFloorY += 0.001
+        
+        // On la positionne très loin. Comme la porte est à +2000, elle apparaîtra à -120m !
+        biomeFloorNode.position = SCNVector3(0, currentBiomeFloorY, -2120.0)
+        
+        biomeFloorNode.name = "biomeFloor"
+        self.rootNode.addChildNode(biomeFloorNode)
     }
     
     func spawnStreetLight() {
@@ -716,6 +844,16 @@ class GameScene: SCNScene {
             } else if node.name == "sign" {
                 node.position.z += distance
                 if node.position.z > 10 { node.removeFromParentNode() }
+            
+            } else if node.name == "tunnel" || node.name == "bridge" {
+                node.position.z += distance
+                // On détruit les arches une fois passées derrière la caméra
+                if node.position.z > 20.0 { node.removeFromParentNode() }
+                
+            } else if node.name == "biomeFloor" {
+                node.position.z += distance
+                // Le tapis roulant est immense, on ne le détruit que très tard !
+                if node.position.z > 2500.0 { node.removeFromParentNode() }
             }
         }
         
@@ -766,30 +904,119 @@ class GameScene: SCNScene {
             nextCoinDistance += Float.random(in: 100.0...500.0)
         }
         
-        if distanceTraveled >= nextTreeDistance {
-            // On peut même en faire apparaître deux d'un coup parfois (gauche et droite)
-            spawnTree()
-            if Bool.random() { spawnTree() }
+        // ==============================================
+        // --- LOGIQUE DE CHANGEMENT DE BIOME (DÉCOR) ---
+        // ==============================================
+        
+        biomeDistance += distance
+        if biomeDistance > targetBiomeLength {
+            biomeDistance = 0.0
             
-            // Un nouvel arbre apparaît tous les 15 à 30 mètres
-            nextTreeDistance += Float.random(in: 15.0...30.0)
+            // 1. Choix ALÉATOIRE du prochain Biome
+            var possibleBiomes: [Biome] = [.forest, .bridge, .tunnel]
+            possibleBiomes.removeAll(where: { $0 == currentBiome })
+            currentBiome = possibleBiomes.randomElement() ?? .forest
+            
+            // 2. Choix ALÉATOIRE de la longueur du nouveau Biome (Entre ~750m et ~2km)
+            targetBiomeLength = Float.random(in: 900.0 ... 2300.0)
+            
+            // 3. APPARITION BRUTALE DU SOL ET DE LA PORTE D'ENTRÉE
+            if currentBiome == .tunnel {
+                spawnBiomeFloor(color: UIColor(white: 0.15, alpha: 1.0), biome: .tunnel)
+                
+                // On aligne les premières arches exactement derrière l'entrée
+                for i in 0..<10 {
+                    let archNode = spawnTunnelArchNode()
+                    archNode.position.z = -122.0 - Float(i * 4) // Centré mathématiquement
+                    self.rootNode.addChildNode(archNode)
+                }
+                nextTunnelArchDistance = distanceTraveled + 40.0
+                
+            } else if currentBiome == .bridge {
+                spawnBiomeFloor(color: UIColor(red: 0.0, green: 0.4, blue: 0.7, alpha: 1.0), biome: .bridge)
+                
+                // On aligne les glissières de 60m derrière le portique
+                for i in 0..<2 { // 2 morceaux de 60m = 120m de pré-généré
+                    let bridgeNode = spawnBridgeSegmentNode()
+                    bridgeNode.position.z = -150.0 - Float(i * 60) // Décalage de 60m
+                    self.rootNode.addChildNode(bridgeNode)
+                }
+                nextBridgeSegmentDistance = distanceTraveled + 120.0 // On reprend après 120m
+                
+            } else {
+                // Forêt
+                spawnBiomeFloor(color: UIColor.systemGreen, biome: .forest)
+                // On attend que le sol vert arrive avant de planter les arbres
+                nextTreeDistance = distanceTraveled + 150.0
+                nextSignDistance = distanceTraveled + 200.0
+            }
+            
+            // 4. FONDU ENCHAÎNÉ (CIEL/SOLEIL UNIQUEMENT)
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 2.0
+            
+            if currentBiome == .tunnel {
+                self.background.contents = UIColor.black
+                self.sunNode.opacity = 0.0
+            } else {
+                self.background.contents = UIColor.systemTeal
+                self.sunNode.opacity = 1.0
+            }
+            
+            SCNTransaction.commit()
+            
+            nextLightDistance = distanceTraveled + 120.0
+            nextCloudDistance = distanceTraveled + Float.random(in: 80.0...150.0)
         }
         
-        if distanceTraveled >= nextLightDistance {
-            spawnStreetLight()
-            // Un nouveau lampadaire TOUS LES 40 MÈTRES, de façon très stricte
-            nextLightDistance += 100.0
+        // --- APPARITION SPÉCIFIQUE SELON LE BIOME ---
+        if currentBiome == .forest {
+            if distanceTraveled >= nextTreeDistance {
+                spawnTree()
+                if Bool.random() { spawnTree() }
+                nextTreeDistance += Float.random(in: 15.0...30.0)
+            }
+            if distanceTraveled >= nextSignDistance {
+                spawnSign()
+                nextSignDistance += Float.random(in: 150.0...400.0)
+            }
+            if distanceTraveled >= nextLightDistance {
+                spawnStreetLight()
+                nextLightDistance += 60.0
+            }
+            if distanceTraveled >= nextCloudDistance {
+                spawnCloud()
+                nextCloudDistance += Float.random(in: 80.0...150.0)
+            }
+        }
+        else if currentBiome == .bridge {
+            if distanceTraveled >= nextBridgeSegmentDistance {
+                // CORRECTION ICI : On récupère le noeud, on le place et on l'ajoute !
+                let bridgeNode = spawnBridgeSegmentNode()
+                bridgeNode.position.z = -120.0 // Apparaît au fond
+                self.rootNode.addChildNode(bridgeNode)
+                
+                nextBridgeSegmentDistance += 60.0 // Segments collés les uns aux autres !
+            }
+            
+            if distanceTraveled >= nextCloudDistance {
+                spawnCloud()
+                nextCloudDistance += Float.random(in: 80.0...150.0)
+            }
+        }
+        else if currentBiome == .tunnel {
+            if distanceTraveled >= nextTunnelArchDistance {
+                // CORRECTION ICI : Pareil pour le tunnel !
+                let archNode = spawnTunnelArchNode()
+                archNode.position.z = -120.0
+                self.rootNode.addChildNode(archNode)
+                
+                nextTunnelArchDistance += 4.0 // Arches de 4m collées = Tunnel infini !
+            }
         }
         
-        if distanceTraveled >= nextSignDistance {
-            spawnSign()
-            // Un panneau apparaît aléatoirement tous les 150 à 400 mètres
-            nextSignDistance += Float.random(in: 150.0...400.0)
-        }
-        
-        // --- LE "FAUX" CALCUL DE LA VITESSE (L'illusion d'arcade) ---
-        // Le ratio magique de 2.25 permet d'afficher 90km/h quand le jeu tourne à 40m/s
-        let magicMultiplier: Float = 3.2
+        // --- LE NOUVEAU CALCUL RÉALISTE DE LA VITESSE ---
+        let magicMultiplier: Float = 3.1 // 40 m/s * 3.1 = 124 km/h (comme sur tes screens)
         let currentKmH = Int(gameSpeed * magicMultiplier)
         
         if currentKmH != lastReportedSpeed {
@@ -797,11 +1024,10 @@ class GameScene: SCNScene {
             DispatchQueue.main.async { self.onSpeedUpdate?(currentKmH) }
         }
         
-        // --- LE "FAUX" CALCUL DE LA DISTANCE ---
-        // Pour que les kilomètres parcourus soient mathématiquement logiques avec
-        // ce faux compteur de vitesse, on applique un ratio inverse à la distance.
-        // Ratio de 0.625 (soit 90/144)
-        let virtualDistance = distanceTraveled * 0.625
+        // --- LE NOUVEAU CALCUL RÉALISTE DE LA DISTANCE ---
+        // Vrai ratio physique : (Multiplier / 3.6)
+        let ratioDistance = magicMultiplier / 3.6
+        let virtualDistance = distanceTraveled * ratioDistance
         
         if virtualDistance - lastReportedDistance >= 10.0 {
             lastReportedDistance = virtualDistance
